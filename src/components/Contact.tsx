@@ -128,7 +128,7 @@ export default function Contact() {
                                     <div className="flex-1 text-right">
                                         <h4 className="text-white font-semibold mb-1" style={{ color: '#ffffff' }}>الموقع</h4>
                                         <p className="text-white/70" style={{ color: '#ffffff' }}>
-                                            تونس - تونس العاصمة
+                                            1 نهج الحبيب بوقطفة، حمام الأنف 2055
                                         </p>
                                     </div>
                                 </div>
