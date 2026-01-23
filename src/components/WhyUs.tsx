@@ -55,7 +55,7 @@ export default function WhyUs() {
                 {/* Gradient Orbs */}
                 <div className="absolute top-1/4 right-0 w-[600px] h-[600px] bg-accent-500/5 rounded-full blur-[150px]" />
                 <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-navy-500/10 rounded-full blur-[120px]" />
-                
+
                 {/* Grid Pattern */}
                 <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
             </div>
@@ -79,7 +79,7 @@ export default function WhyUs() {
 
                     {/* Subtitle */}
                     <p className="text-lg text-white/70 leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                        نشتغل بمنطق الشراكة طويلة المدى — وضوح، سرعة، ونتائج قابلة للقياس. 
+                        نشتغل بمنطق الشراكة طويلة المدى — وضوح، سرعة، ونتائج قابلة للقياس.
                         نحن لا نقدم خدمات فحسب، بل نحمل عنكم عبء التنفيذ والتعقيد التقني.
                     </p>
                 </div>
@@ -105,13 +105,13 @@ export default function WhyUs() {
                             <h3 className="text-xl font-bold text-white mb-2 group-hover:text-accent-400 transition-colors duration-300" style={{ color: '#fff' }}>
                                 {reason.title}
                             </h3>
-                            
+
                             {/* Subtitle in French */}
                             <span className="text-xs font-semibold text-white/80 uppercase tracking-wider block mb-4" style={{ color: '#ffffffcc' }}>
                                 {reason.subtitle}
                             </span>
-                            
-                            <p className="text-navy-300 leading-relaxed">
+
+                            <p className="text-white leading-relaxed" style={{ color: '#ffffff' }}>
                                 {reason.description}
                             </p>
 
