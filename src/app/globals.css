@@ -539,3 +539,7 @@ p {
 @media print {
   .no-print { display: none !important; }
 }
+
+/* Hide Scrollbar */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

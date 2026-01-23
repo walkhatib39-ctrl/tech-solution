@@ -13,24 +13,23 @@ export default function About() {
                     <div className="relative order-2 lg:order-1">
                         <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-[#31486a]/20">
                             {/* Placeholder for team/company image */}
-                            <div className="aspect-[4/3] bg-gradient-to-br from-[#31486a] to-[#39547c] flex items-center justify-center">
-                                <div className="text-center text-white p-8">
-                                    <div className="w-32 h-32 mx-auto mb-6 rounded-full bg-white/10 flex items-center justify-center">
-                                        <svg className="w-16 h-16 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                        </svg>
-                                    </div>
-                                    <p className="text-lg font-semibold opacity-90">Tech-Solution</p>
-                                    <p className="text-sm opacity-70">شريككم الاستراتيجي</p>
-                                </div>
+                            <div className="relative aspect-[4/3]">
+                                <Image
+                                    src="/about-us.jpg"
+                                    alt="Tech-Solution Team"
+                                    fill
+                                    className="object-cover"
+                                    sizes="(max-width: 768px) 100vw, 50vw"
+                                    priority
+                                />
                             </div>
-                            
+
                             {/* Decorative corner accent */}
                             <div className="absolute top-0 left-0 w-24 h-24 bg-[#d9140e] rounded-br-3xl flex items-center justify-center">
-                                <span className="text-white font-bold text-2xl">+10</span>
+                                <span className="text-white font-bold text-2xl">+17</span>
                             </div>
                         </div>
-                        
+
                         {/* Floating badge */}
                         <div className="absolute -bottom-6 -right-6 bg-white rounded-xl p-4 shadow-xl shadow-[#31486a]/10 border border-[#39547c]/10">
                             <div className="flex items-center gap-3">
@@ -65,8 +64,8 @@ export default function About() {
                         </p>
 
                         {/* CTA Button */}
-                        <Link 
-                            href="#contact" 
+                        <Link
+                            href="#contact"
                             className="inline-flex items-center gap-3 px-8 py-4 border-2 border-[#39547c] text-[#39547c] font-semibold rounded-xl hover:bg-[#39547c] hover:text-white transition-all duration-300"
                         >
                             <span>الملف التعريفي</span>

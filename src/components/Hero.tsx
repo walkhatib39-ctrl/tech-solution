@@ -6,7 +6,7 @@ import { ArrowLeft, Globe, CheckCircle, Building2, Sparkles } from 'lucide-react
 const stats = [
     {
         icon: Globe,
-        value: '+10',
+        value: '+17',
         label: 'سنوات خبرة',
         sublabel: 'Années d\'expertise',
         accent: true,

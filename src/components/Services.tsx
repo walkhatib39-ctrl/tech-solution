@@ -10,15 +10,16 @@ const services = [
         title: 'الحلول الرقمية',
         subtitle: 'Solutions Digitales',
         description: 'تطوير المنظومات الذكية للمؤسسات والشركات',
-        longDescription: 'نرافق المؤسسات الحكومية والخاصة في رحلة التحول الرقمي عبر حلول تقنية متكاملة تضمن الكفاءة، الأمان، وتجربة مستخدم متطورة.',
+        longDescription: 'نرافق المؤسسات الحكومية والخاصة في رحلة التحول الرقمي عبر حلول تقنية متكاملة.',
         icon: Monitor,
         features: [
             'تطوير المنصات والبوابات التفاعلية',
             'مواقع الويب المؤسساتية',
             'تطبيقات الجوال والحلول المدمجة'
         ],
-        highlight: 'الكفاءة، الأمان، وتجربة مستخدم متطورة',
+        highlight: '',
         gradient: 'from-accent-500 to-accent-600',
+        backgroundImage: '/service-digital.jpg',
     },
     {
         id: 'media',
@@ -33,8 +34,9 @@ const services = [
             'البث المباشر للندوات والتظاهرات',
             'الإنتاج السمعي البصري والمقابلات'
         ],
-        highlight: 'شراكات إعلامية وانتشار مدروس',
+        highlight: '',
         gradient: 'from-navy-700 to-navy-800',
+        backgroundImage: '/service-media.jpg',
     },
     {
         id: 'events',
@@ -49,8 +51,10 @@ const services = [
             'إدارة الحملات الاتصالية',
             'تصميم وإنتاج المطبوعات'
         ],
-        highlight: 'خدمات 360° للمؤتمرات والأحداث الكبرى',
-        gradient: 'from-gold-500 to-gold-400',
+        highlight: '',
+        gradient: 'from-navy-700 to-navy-800',
+        iconColor: 'white',
+        backgroundImage: '/service-events.png',
     },
     {
         id: 'training',
@@ -65,8 +69,10 @@ const services = [
             'ورشات عمل تطبيقية للموظفين',
             'برامج المرافقة وإدارة التغيير'
         ],
-        highlight: 'قطب عرضاني — نقل الخبرات وإدارة التغيير',
-        gradient: 'from-emerald-500 to-emerald-600',
+        highlight: '',
+        gradient: 'from-accent-500 to-accent-600',
+        iconColor: 'white',
+        backgroundImage: '/service-training.webp',
     }
 ];
 
@@ -105,10 +111,19 @@ export default function Services() {
                     {services.map((service, index) => (
                         <div
                             key={service.id}
-                            className="group relative bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 border border-navy-100 hover:border-navy-200 overflow-hidden"
+                            className="group relative rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 border border-navy-100 hover:border-navy-200 overflow-hidden"
                         >
+                            {/* Background Image */}
+                            <div
+                                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                                style={{ backgroundImage: `url(${service.backgroundImage})` }}
+                            />
+
+                            {/* Dark Overlay with #0f172a */}
+                            <div className="absolute inset-0 bg-[#0f172a]/95" />
+
                             {/* Background Number */}
-                            <div className="absolute top-4 left-4 text-[120px] font-bold text-navy-100/50 leading-none pointer-events-none select-none group-hover:text-accent-500/10 transition-colors duration-500">
+                            <div className="absolute top-4 left-4 text-[120px] font-bold text-white/10 leading-none pointer-events-none select-none group-hover:text-accent-500/10 transition-colors duration-500">
                                 {service.number}
                             </div>
 
@@ -117,56 +132,55 @@ export default function Services() {
                                 {/* Header */}
                                 <div className="flex items-start justify-between mb-6">
                                     {/* Icon */}
-                                    <div className={`p-4 rounded-xl bg-gradient-to-br ${service.gradient} text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                                    <div className={`p-4 rounded-xl bg-gradient-to-br ${service.gradient} ${service.iconColor === 'white' ? 'text-white' : 'text-white'} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
                                         <service.icon className="w-7 h-7" strokeWidth={1.5} />
                                     </div>
 
-                                    {/* Number Badge */}
-                                    <span className="text-sm font-bold text-navy-300 bg-navy-50 px-3 py-1 rounded-full">
-                                        {service.number}
-                                    </span>
+
                                 </div>
 
                                 {/* Title & Subtitle */}
-                                <h3 className="text-2xl font-bold text-navy-900 mb-1 group-hover:text-accent-500 transition-colors">
+                                <h3 className="text-2xl font-bold text-white mb-1 group-hover:text-accent-300 transition-colors" style={{ color: '#ffffff' }}>
                                     {service.title}
                                 </h3>
-                                <span className="text-sm font-medium text-navy-400 uppercase tracking-wider block mb-4">
+                                <span className="text-sm font-medium text-white/70 uppercase tracking-wider block mb-4">
                                     {service.subtitle}
                                 </span>
 
                                 {/* Short Description */}
-                                <p className="text-accent-500 font-medium mb-4">
+                                <p className="text-accent-300 font-medium mb-4" style={{ color: '#ffffff' }}>
                                     {service.description}
                                 </p>
 
                                 {/* Long Description */}
-                                <p className="text-navy-600 mb-6 leading-relaxed">
+                                <p className="text-white/90 mb-6 leading-relaxed" style={{ color: '#ffffff' }}>
                                     {service.longDescription}
                                 </p>
 
                                 {/* Features List */}
                                 <ul className="space-y-3 mb-8">
                                     {service.features.map((feature, i) => (
-                                        <li key={i} className="flex items-center gap-3 text-sm text-navy-700">
-                                            <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                                        <li key={i} className="flex items-center gap-3 text-sm text-white/90">
+                                            <CheckCircle2 className="w-5 h-5 text-accent-300 flex-shrink-0" />
                                             {feature}
                                         </li>
                                     ))}
                                 </ul>
 
                                 {/* Footer */}
-                                <div className="flex items-center justify-between pt-6 border-t border-navy-100">
-                                    {/* Highlight Badge */}
-                                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-navy-600 bg-navy-50 px-3 py-1.5 rounded-full">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-accent-500" />
-                                        {service.highlight}
-                                    </span>
+                                <div className="flex items-center justify-between pt-6 border-t border-white/20">
+                                    {/* Highlight Badge - Only show if highlight is not empty */}
+                                    {service.highlight && (
+                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-white/10 px-3 py-1.5 rounded-full">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-accent-300" />
+                                            {service.highlight}
+                                        </span>
+                                    )}
 
                                     {/* CTA Link */}
-                                    <Link 
+                                    <Link
                                         href={`#${service.id}`}
-                                        className="group/link inline-flex items-center gap-2 text-navy-700 font-semibold hover:text-accent-500 transition-colors"
+                                        className="group/link inline-flex items-center gap-2 text-white font-semibold hover:text-accent-300 transition-colors"
                                     >
                                         اكتشف المزيد
                                         <ArrowLeft className="w-4 h-4 transition-transform group-hover/link:-translate-x-1" />
@@ -187,7 +201,7 @@ export default function Services() {
                     <p className="text-navy-600 mb-6">
                         هل لديك مشروع محدد؟ نحن هنا لمساعدتك
                     </p>
-                    <Link 
+                    <Link
                         href="#contact"
                         className="btn btn-primary btn-lg"
                     >

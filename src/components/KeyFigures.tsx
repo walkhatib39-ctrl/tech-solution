@@ -5,24 +5,21 @@ import { Trophy, Clock, Phone, Users, Star, TrendingUp } from 'lucide-react';
 const figures = [
     {
         icon: Trophy,
-        value: '+50',
+        value: '115',
         label: 'مشروع منجز',
         sublabel: 'Projets Réalisés',
-        description: 'مشاريع ناجحة في مختلف القطاعات',
     },
     {
         icon: Clock,
         value: '100%',
         label: 'التزام بالمواعيد',
         sublabel: 'Respect des Délais',
-        description: 'نسبة الالتزام بالجداول الزمنية',
     },
     {
         icon: Phone,
         value: '24/7',
         label: 'دعم فني متواصل',
         sublabel: 'Support Technique',
-        description: 'فريق جاهز للمساعدة دائماً',
     },
 ];
 
@@ -33,7 +30,7 @@ export default function KeyFigures() {
             <div className="absolute inset-0 pointer-events-none">
                 {/* Animated Pattern */}
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:20px_20px]" />
-                
+
                 {/* Gradient Orbs */}
                 <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-white/10 rounded-full blur-[100px]" />
                 <div className="absolute bottom-0 left-1/4 w-[300px] h-[300px] bg-black/10 rounded-full blur-[80px]" />
@@ -42,8 +39,8 @@ export default function KeyFigures() {
             <div className="container relative z-10">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 lg:gap-12">
                     {figures.map((fig, index) => (
-                        <div 
-                            key={index} 
+                        <div
+                            key={index}
                             className="group relative text-center"
                         >
                             {/* Divider for middle items */}
@@ -69,14 +66,9 @@ export default function KeyFigures() {
                                 </div>
 
                                 {/* Sublabel */}
-                                <div className="text-sm text-white/60 uppercase tracking-wider mb-3">
+                                <div className="text-sm text-white/60 uppercase tracking-wider">
                                     {fig.sublabel}
                                 </div>
-
-                                {/* Description */}
-                                <p className="text-white/70 text-sm max-w-xs mx-auto">
-                                    {fig.description}
-                                </p>
 
                                 {/* Hover Glow */}
                                 <div className="absolute inset-0 rounded-2xl bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -89,14 +81,14 @@ export default function KeyFigures() {
             {/* Top Wave */}
             <div className="absolute top-0 left-0 right-0">
                 <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto" preserveAspectRatio="none">
-                    <path d="M0 60V0C360 40 720 50 1080 30C1260 20 1380 10 1440 0V60H0Z" fill="white" fillOpacity="0.05"/>
+                    <path d="M0 60V0C360 40 720 50 1080 30C1260 20 1380 10 1440 0V60H0Z" fill="white" fillOpacity="0.05" />
                 </svg>
             </div>
 
             {/* Bottom Wave */}
             <div className="absolute bottom-0 left-0 right-0">
                 <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto rotate-180" preserveAspectRatio="none">
-                    <path d="M0 60V0C360 40 720 50 1080 30C1260 20 1380 10 1440 0V60H0Z" fill="white" fillOpacity="0.05"/>
+                    <path d="M0 60V0C360 40 720 50 1080 30C1260 20 1380 10 1440 0V60H0Z" fill="white" fillOpacity="0.05" />
                 </svg>
             </div>
         </section>
