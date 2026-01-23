@@ -61,12 +61,12 @@ export default function Partners() {
 
                     {/* Scrolling Container */}
                     <div
-                        className="flex gap-8 w-max animate-marquee-triple hover:[animation-play-state:paused]"
+                        className="flex w-max animate-marquee-triple md:group-hover:[animation-play-state:paused]"
                         dir="ltr"
                     >
                         {/* Render 3 sets for robust infinite looping (enough for 4k screens) */}
                         {Array(3).fill(null).map((_, setIndex) => (
-                            <div key={`set-${setIndex}`} className="flex gap-8 shrink-0">
+                            <div key={`set-${setIndex}`} className="flex gap-8 shrink-0 pr-8">
                                 {partners.map((partner) => (
                                     <div
                                         key={`set${setIndex}-${partner.id}`}
