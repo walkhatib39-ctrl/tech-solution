@@ -52,8 +52,8 @@ export default function Partners() {
                 {/* Partners Marquee - CSS Infinite Scroll */}
                 <div className="relative group overflow-hidden">
                     {/* Gradient Masks */}
-                    <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
-                    <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+                    <div className="absolute inset-y-0 left-0 w-12 md:w-32 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
+                    <div className="absolute inset-y-0 right-0 w-12 md:w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
 
                     {/* Scrolling Container */}
                     <div className="flex gap-8 w-max animate-marquee hover:[animation-play-state:paused]">
