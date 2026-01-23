@@ -60,9 +60,12 @@ export default function Partners() {
                     <div className="absolute inset-y-0 right-0 w-12 md:w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
 
                     {/* Scrolling Container */}
-                    <div className="flex gap-8 w-max animate-marquee-sextuple hover:[animation-play-state:paused]">
-                        {/* Render 6 sets for robust infinite looping even with few items */}
-                        {Array(6).fill(null).map((_, setIndex) => (
+                    <div
+                        className="flex gap-8 w-max animate-marquee-triple hover:[animation-play-state:paused]"
+                        dir="ltr"
+                    >
+                        {/* Render 3 sets for robust infinite looping (enough for 4k screens) */}
+                        {Array(3).fill(null).map((_, setIndex) => (
                             <div key={`set-${setIndex}`} className="flex gap-8 shrink-0">
                                 {partners.map((partner) => (
                                     <div
@@ -74,6 +77,7 @@ export default function Partners() {
                                             src={partner.image}
                                             alt={partner.alt}
                                             className="max-w-[80%] max-h-[80%] object-contain opacity-70 group-hover/card:opacity-100 transition-all duration-300 grayscale group-hover/card:grayscale-0"
+                                            loading="lazy"
                                         />
                                     </div>
                                 ))}
