@@ -494,6 +494,16 @@ p {
   }
 }
 
+@keyframes marquee-sextuple {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-16.666667%);
+  }
+}
+
 @keyframes gradient-shift {
 
   0%,
@@ -528,6 +538,10 @@ p {
 
 .animate-marquee-triple {
   animation: marquee-triple 40s linear infinite;
+}
+
+.animate-marquee-sextuple {
+  animation: marquee-sextuple 60s linear infinite;
 }
 
 .animate-gradient {
