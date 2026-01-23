@@ -56,7 +56,7 @@ export default function Partners() {
                     <div className="absolute inset-y-0 right-0 w-12 md:w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
 
                     {/* Scrolling Container */}
-                    <div className="flex gap-8 w-max animate-marquee hover:[animation-play-state:paused]">
+                    <div className="flex gap-8 w-max animate-marquee-triple hover:[animation-play-state:paused]">
                         {/* First Set */}
                         {partners.map((partner) => (
                             <div
@@ -71,10 +71,24 @@ export default function Partners() {
                                 />
                             </div>
                         ))}
-                        {/* Duplicate Set for Seamless Loop */}
+                        {/* Second Set */}
                         {partners.map((partner) => (
                             <div
                                 key={`set2-${partner.id}`}
+                                className="flex-shrink-0 bg-white rounded-xl border border-navy-100 flex items-center justify-center hover:border-navy-200 hover:shadow-lg transition-all duration-300 select-none group/card"
+                                style={{ width: '192px', height: '112px' }}
+                            >
+                                <img
+                                    src={partner.image}
+                                    alt={partner.alt}
+                                    className="max-w-[80%] max-h-[80%] object-contain opacity-70 group-hover/card:opacity-100 transition-all duration-300 grayscale group-hover/card:grayscale-0"
+                                />
+                            </div>
+                        ))}
+                        {/* Third Set for Seamless Loop on Wide Screens */}
+                        {partners.map((partner) => (
+                            <div
+                                key={`set3-${partner.id}`}
                                 className="flex-shrink-0 bg-white rounded-xl border border-navy-100 flex items-center justify-center hover:border-navy-200 hover:shadow-lg transition-all duration-300 select-none group/card"
                                 style={{ width: '192px', height: '112px' }}
                             >
