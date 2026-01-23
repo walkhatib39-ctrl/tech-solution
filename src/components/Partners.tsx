@@ -59,7 +59,7 @@ export default function Partners() {
                 </RevealOnScroll>
 
                 {/* Partners Marquee - CSS Infinite Scroll */}
-                <RevealOnScroll className="relative group overflow-hidden" width="100%" delay={200}>
+                <div className="relative group overflow-hidden w-full" dir="ltr">
                     {/* Gradient Masks */}
                     <div className="absolute inset-y-0 left-0 w-12 md:w-32 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
                     <div className="absolute inset-y-0 right-0 w-12 md:w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
@@ -67,16 +67,23 @@ export default function Partners() {
                     {/* Scrolling Container */}
                     <div
                         className="flex w-max animate-marquee md:group-hover:[animation-play-state:paused]"
-                        dir="ltr"
+                        style={{
+                            willChange: 'transform',
+                            animationDuration: '60s' /* Adjusted for 3x duplication per set */
+                        }}
                     >
-                        {/* Render 2 identical sets for perfect looping */}
+                        {/* We render 2 identical sets. Each set contains the partners list repeated 3 times. 
+                            This creates a massive buffer that is guaranteed to overflow any screen.
+                            Animation moves -50%, seamlessly swapping Set 1 for Set 2.
+                        */}
                         {Array(2).fill(null).map((_, setIndex) => (
-                            <div key={`set-${setIndex}`} className="flex gap-8 shrink-0 pr-8">
-                                {partners.map((partner) => (
+                            <div key={`set-${setIndex}`} className="flex shrink-0">
+                                {/* Tripled partners list inside each set */}
+                                {[...partners, ...partners, ...partners].map((partner, index) => (
                                     <div
-                                        key={`set${setIndex}-${partner.id}`}
-                                        className="flex-shrink-0 bg-white rounded-xl border border-navy-100 flex items-center justify-center hover:border-navy-200 hover:shadow-lg transition-all duration-300 select-none group/card"
-                                        style={{ width: '192px', height: '112px' }}
+                                        key={`set${setIndex}-${partner.id}-${index}`}
+                                        className="relative mx-4 flex-shrink-0 bg-white rounded-xl border border-navy-100 flex items-center justify-center hover:border-navy-200 hover:shadow-lg transition-all duration-300 select-none group/card"
+                                        style={{ width: '180px', height: '100px' }}
                                     >
                                         <img
                                             src={partner.image}
@@ -89,7 +96,7 @@ export default function Partners() {
                             </div>
                         ))}
                     </div>
-                </RevealOnScroll>
+                </div>
 
                 {/* Trust Badges */}
                 <div className="mt-16 flex flex-wrap items-center justify-center gap-6">

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowLeft, Globe, CheckCircle, Building2, Sparkles } from 'lucide-react';
+import RevealOnScroll from './ui/RevealOnScroll';
 
 const stats = [
     {
@@ -26,8 +27,6 @@ const stats = [
         accent: true,
     },
 ];
-
-import RevealOnScroll from './ui/RevealOnScroll';
 
 // ... (stats array)
 
