@@ -16,6 +16,11 @@ const partners = [
     { id: 9, image: '/partners/9.jpg', alt: 'Partner 9' },
     { id: 10, image: '/partners/10.jpg', alt: 'Partner 10' },
     { id: 11, image: '/partners/11.jpg', alt: 'Partner 11' },
+    // New partners
+    { id: 12, image: '/partners/partner-1.jpg', alt: 'Partner 12' },
+    { id: 13, image: '/partners/partner-3.png', alt: 'Partner 13' },
+    { id: 14, image: '/partners/partner-4.png', alt: 'Partner 14' },
+    { id: 15, image: '/partners/partner-5.png', alt: 'Partner 15' },
 ];
 
 import RevealOnScroll from './ui/RevealOnScroll';
@@ -61,11 +66,11 @@ export default function Partners() {
 
                     {/* Scrolling Container */}
                     <div
-                        className="flex w-max animate-marquee-triple md:group-hover:[animation-play-state:paused]"
+                        className="flex w-max animate-marquee md:group-hover:[animation-play-state:paused]"
                         dir="ltr"
                     >
-                        {/* Render 3 sets for robust infinite looping (enough for 4k screens) */}
-                        {Array(3).fill(null).map((_, setIndex) => (
+                        {/* Render 2 identical sets for perfect looping */}
+                        {Array(2).fill(null).map((_, setIndex) => (
                             <div key={`set-${setIndex}`} className="flex gap-8 shrink-0 pr-8">
                                 {partners.map((partner) => (
                                     <div
