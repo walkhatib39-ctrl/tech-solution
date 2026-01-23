@@ -50,7 +50,7 @@ export default function Footer() {
             {/* Main Content */}
             <div className="container relative z-10 pt-20 pb-10">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 mb-16">
-                    
+
                     {/* Brand Column */}
                     <div className="lg:col-span-4">
                         {/* Logo */}
@@ -87,9 +87,9 @@ export default function Footer() {
 
                     {/* Quick Links */}
                     <div className="lg:col-span-2">
-<h4 className="text-lg font-bold text-white mb-6 pb-3 border-b border-navy-800" style={{ color: '#fff' }}>
-    روابط سريعة
-</h4>
+                        <h4 className="text-lg font-bold text-white mb-6 pb-3 border-b border-navy-800" style={{ color: '#fff' }}>
+                            روابط سريعة
+                        </h4>
                         <ul className="space-y-3">
                             {quickLinks.map((link) => (
                                 <li key={link.name}>
@@ -107,9 +107,9 @@ export default function Footer() {
 
                     {/* Services */}
                     <div className="lg:col-span-3">
-<h4 className="text-lg font-bold text-white mb-6 pb-3 border-b border-navy-800" style={{ color: '#fff' }}>
-    خدماتنا
-</h4>
+                        <h4 className="text-lg font-bold text-white mb-6 pb-3 border-b border-navy-800" style={{ color: '#fff' }}>
+                            خدماتنا
+                        </h4>
                         <ul className="space-y-3">
                             {services.map((link) => (
                                 <li key={link.name}>
@@ -127,10 +127,10 @@ export default function Footer() {
 
                     {/* Contact Info */}
                     <div className="lg:col-span-3">
-<h4 className="text-lg font-bold text-white mb-6 pb-3 border-b border-navy-800" style={{ color: '#fff' }}>
-    تواصل معنا
-</h4>
-                        
+                        <h4 className="text-lg font-bold text-white mb-6 pb-3 border-b border-navy-800" style={{ color: '#fff' }}>
+                            تواصل معنا
+                        </h4>
+
                         <div className="space-y-4">
                             {/* Phone */}
                             <a
@@ -148,7 +148,7 @@ export default function Footer() {
 
                             {/* Email */}
                             <a
-                                href="mailto:contact@tech-solution.tn"
+                                href="mailto:contact@techsolution-group.com"
                                 className="group flex items-start gap-4 p-4"
                             >
                                 <div className="p-2 rounded-lg text-accent-400">
@@ -156,7 +156,7 @@ export default function Footer() {
                                 </div>
                                 <div>
                                     <div className="text-xs text-navy-400 uppercase tracking-wider mb-1">البريد الإلكتروني</div>
-                                    <div className="text-white font-semibold">contact@tech-solution.tn</div>
+                                    <div className="text-white font-semibold">contact@techsolution-group.com</div>
                                 </div>
                             </a>
 

@@ -101,8 +101,8 @@ export default function Contact() {
                                     </div>
                                     <div className="flex-1 text-right">
                                         <h4 className="text-white font-semibold mb-1" style={{ color: '#ffffff' }}>البريد الإلكتروني</h4>
-                                        <a href="mailto:contact@tech-solution.tn" className="text-white/70 hover:text-white transition-colors">
-                                            contact@tech-solution.tn
+                                        <a href="mailto:contact@techsolution-group.com" className="text-white/70 hover:text-white transition-colors">
+                                            contact@techsolution-group.com
                                         </a>
                                     </div>
                                 </div>
@@ -114,8 +114,8 @@ export default function Contact() {
                                     </div>
                                     <div className="flex-1 text-right">
                                         <h4 className="text-white font-semibold mb-1" style={{ color: '#ffffff' }}>الجوال</h4>
-                                        <a href="tel:+21612345678" className="text-white/70 hover:text-white transition-colors" dir="ltr">
-                                            (+216) 12 345 678
+                                        <a href="tel:+21655588350" className="text-white/70 hover:text-white transition-colors" dir="ltr">
+                                            +216 55 588 350
                                         </a>
                                     </div>
                                 </div>

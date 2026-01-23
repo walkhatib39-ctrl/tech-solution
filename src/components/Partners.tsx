@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { Building2 } from 'lucide-react';
 
 // Partner logos
@@ -20,68 +19,6 @@ const partners = [
 ];
 
 export default function Partners() {
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const scrollState = useRef({ isPaused: false, position: 0 });
-
-    useEffect(() => {
-        const container = scrollRef.current;
-        if (!container) return;
-
-        let animationId: number;
-        // Speed: 1px per frame (approx 60px/sec) - "un peu plus rapide"
-        const speed = 1.0;
-
-        const animate = () => {
-            if (!scrollState.current.isPaused && container) {
-                // Determine width of one set of items
-                // 10 items * (192px width + 32px gap) = 2240px roughly
-                // But we can measure dynamically
-                const scrollWidth = container.scrollWidth;
-                const clientWidth = container.clientWidth;
-
-                // We have 3 sets. The middle set starts at 1/3 of scrollWidth
-                const singleSetWidth = scrollWidth / 3;
-
-                scrollState.current.position += speed;
-
-                if (scrollState.current.position >= singleSetWidth * 2) {
-                    // Reset to first set (seamless loop)
-                    scrollState.current.position = singleSetWidth;
-                    container.scrollLeft = singleSetWidth;
-                } else {
-                    container.scrollLeft = scrollState.current.position;
-                }
-            } else if (container) {
-                // Sync position with manual scroll
-                scrollState.current.position = container.scrollLeft;
-            }
-            animationId = requestAnimationFrame(animate);
-        };
-
-        // Initial Scroll Position to middle set to allow scroll left immediately
-        const initScroll = () => {
-            if (container) {
-                const singleSetWidth = container.scrollWidth / 3;
-                container.scrollLeft = singleSetWidth;
-                scrollState.current.position = singleSetWidth;
-            }
-        };
-
-        // Wait for images to load/layout
-        setTimeout(initScroll, 100);
-
-        animationId = requestAnimationFrame(animate);
-
-        return () => cancelAnimationFrame(animationId);
-    }, []);
-
-    const pauseScroll = () => {
-        scrollState.current.isPaused = true;
-    };
-
-    const resumeScroll = () => {
-        scrollState.current.isPaused = false;
-    };
 
     return (
         <section id="partners" className="section bg-white relative overflow-hidden">
@@ -112,33 +49,39 @@ export default function Partners() {
                     </p>
                 </div>
 
-                {/* Partners Marquee - Interactive Infinite Scroll */}
-                <div className="relative group">
+                {/* Partners Marquee - CSS Infinite Scroll */}
+                <div className="relative group overflow-hidden">
                     {/* Gradient Masks */}
                     <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
                     <div className="absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
 
                     {/* Scrolling Container */}
-                    <div
-                        ref={scrollRef}
-                        className="overflow-x-auto no-scrollbar flex gap-8 py-4 mask-gradient cursor-grab active:cursor-grabbing"
-                        onMouseEnter={pauseScroll}
-                        onMouseLeave={resumeScroll}
-                        onTouchStart={pauseScroll}
-                        onTouchEnd={resumeScroll}
-                        style={{ scrollBehavior: 'auto', WebkitOverflowScrolling: 'touch' }}
-                    >
-                        {/* Triplicate Set for Seamless Loop */}
-                        {[...partners, ...partners, ...partners].map((partner, index) => (
+                    <div className="flex gap-8 w-max animate-marquee hover:[animation-play-state:paused]">
+                        {/* First Set */}
+                        {partners.map((partner) => (
                             <div
-                                key={`${partner.id}-${index}`}
-                                className="flex-shrink-0 bg-white rounded-xl border border-navy-100 flex items-center justify-center hover:border-navy-200 hover:shadow-lg transition-all duration-300 select-none"
+                                key={`set1-${partner.id}`}
+                                className="flex-shrink-0 bg-white rounded-xl border border-navy-100 flex items-center justify-center hover:border-navy-200 hover:shadow-lg transition-all duration-300 select-none group/card"
                                 style={{ width: '192px', height: '112px' }}
                             >
                                 <img
                                     src={partner.image}
                                     alt={partner.alt}
-                                    className="max-w-[80%] max-h-[80%] object-contain opacity-90 hover:opacity-100 transition-opacity grayscale hover:grayscale-0 pointer-events-none"
+                                    className="max-w-[80%] max-h-[80%] object-contain opacity-70 group-hover/card:opacity-100 transition-all duration-300 grayscale group-hover/card:grayscale-0"
+                                />
+                            </div>
+                        ))}
+                        {/* Duplicate Set for Seamless Loop */}
+                        {partners.map((partner) => (
+                            <div
+                                key={`set2-${partner.id}`}
+                                className="flex-shrink-0 bg-white rounded-xl border border-navy-100 flex items-center justify-center hover:border-navy-200 hover:shadow-lg transition-all duration-300 select-none group/card"
+                                style={{ width: '192px', height: '112px' }}
+                            >
+                                <img
+                                    src={partner.image}
+                                    alt={partner.alt}
+                                    className="max-w-[80%] max-h-[80%] object-contain opacity-70 group-hover/card:opacity-100 transition-all duration-300 grayscale group-hover/card:grayscale-0"
                                 />
                             </div>
                         ))}

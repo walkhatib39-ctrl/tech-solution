@@ -64,17 +64,16 @@ export default function Header() {
     return (
         <>
             <header
-                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 bg-white ${
-                    isScrolled
+                className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 bg-white ${isScrolled
                         ? 'py-3 shadow-lg shadow-[#31486a]/10'
                         : 'py-5'
-                }`}
+                    }`}
             >
                 <div className="container">
                     <div className="flex items-center justify-between">
                         {/* Logo */}
-                        <Link 
-                            href="/" 
+                        <Link
+                            href="/"
                             className="relative z-50 flex items-center group"
                         >
                             <div className="relative w-44 h-12 transition-transform duration-300 group-hover:scale-105">
@@ -94,20 +93,18 @@ export default function Header() {
                                 <Link
                                     key={link.name}
                                     href={link.href}
-                                    className={`relative px-4 py-2 text-[0.9375rem] font-medium transition-all duration-300 rounded-lg group ${
-                                        activeSection === link.href.replace('#', '')
+                                    className={`relative px-4 py-2 text-[0.9375rem] font-medium transition-all duration-300 rounded-lg group ${activeSection === link.href.replace('#', '')
                                             ? 'text-[#d9140e]'
                                             : 'text-[#39547c] hover:text-[#d9140e]'
-                                    }`}
+                                        }`}
                                 >
                                     {link.name}
                                     {/* Active indicator */}
-                                    <span 
-                                        className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 bg-[#d9140e] rounded-full transition-all duration-300 ${
-                                            activeSection === link.href.replace('#', '') 
-                                                ? 'w-6 opacity-100' 
+                                    <span
+                                        className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 bg-[#d9140e] rounded-full transition-all duration-300 ${activeSection === link.href.replace('#', '')
+                                                ? 'w-6 opacity-100'
                                                 : 'w-0 opacity-0 group-hover:w-4 group-hover:opacity-50'
-                                        }`}
+                                            }`}
                                     />
                                 </Link>
                             ))}
@@ -125,36 +122,32 @@ export default function Header() {
 
                         {/* Mobile Menu Toggle */}
                         <button
-                            className={`lg:hidden relative z-50 p-2 rounded-lg transition-colors ${
-                                isMobileMenuOpen 
-                                    ? 'text-white' 
+                            className={`lg:hidden relative z-50 p-2 rounded-lg transition-colors ${isMobileMenuOpen
+                                    ? 'text-white'
                                     : 'text-[#39547c]'
-                            }`}
+                                }`}
                             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                             aria-label={isMobileMenuOpen ? 'إغلاق القائمة' : 'فتح القائمة'}
                             aria-expanded={isMobileMenuOpen}
                         >
                             <div className="w-6 h-6 relative">
-                                <span 
-                                    className={`absolute left-0 block w-6 h-0.5 rounded-full transition-all duration-300 ${
-                                        isMobileMenuOpen 
-                                            ? 'top-1/2 -translate-y-1/2 rotate-45 bg-white' 
+                                <span
+                                    className={`absolute left-0 block w-6 h-0.5 rounded-full transition-all duration-300 ${isMobileMenuOpen
+                                            ? 'top-1/2 -translate-y-1/2 rotate-45 bg-white'
                                             : 'top-1 bg-current'
-                                    }`}
+                                        }`}
                                 />
-                                <span 
-                                    className={`absolute left-0 top-1/2 -translate-y-1/2 block h-0.5 rounded-full transition-all duration-300 ${
-                                        isMobileMenuOpen 
-                                            ? 'w-0 opacity-0' 
+                                <span
+                                    className={`absolute left-0 top-1/2 -translate-y-1/2 block h-0.5 rounded-full transition-all duration-300 ${isMobileMenuOpen
+                                            ? 'w-0 opacity-0'
                                             : 'w-6 bg-current'
-                                    }`}
+                                        }`}
                                 />
-                                <span 
-                                    className={`absolute left-0 block w-6 h-0.5 rounded-full transition-all duration-300 ${
-                                        isMobileMenuOpen 
-                                            ? 'top-1/2 -translate-y-1/2 -rotate-45 bg-white' 
+                                <span
+                                    className={`absolute left-0 block w-6 h-0.5 rounded-full transition-all duration-300 ${isMobileMenuOpen
+                                            ? 'top-1/2 -translate-y-1/2 -rotate-45 bg-white'
                                             : 'bottom-1 bg-current'
-                                    }`}
+                                        }`}
                                 />
                             </div>
                         </button>
@@ -164,25 +157,22 @@ export default function Header() {
 
             {/* Mobile Menu Overlay */}
             <div
-                className={`fixed inset-0 z-40 lg:hidden transition-all duration-500 ${
-                    isMobileMenuOpen 
-                        ? 'opacity-100 pointer-events-auto' 
+                className={`fixed inset-0 z-40 lg:hidden transition-all duration-500 ${isMobileMenuOpen
+                        ? 'opacity-100 pointer-events-auto'
                         : 'opacity-0 pointer-events-none'
-                }`}
+                    }`}
             >
                 {/* Backdrop */}
-                <div 
-                    className={`absolute inset-0 bg-navy-950/60 backdrop-blur-sm transition-opacity duration-500 ${
-                        isMobileMenuOpen ? 'opacity-100' : 'opacity-0'
-                    }`}
+                <div
+                    className={`absolute inset-0 bg-navy-950/60 backdrop-blur-sm transition-opacity duration-500 ${isMobileMenuOpen ? 'opacity-100' : 'opacity-0'
+                        }`}
                     onClick={() => setIsMobileMenuOpen(false)}
                 />
 
                 {/* Menu Content */}
                 <div
-                    className={`absolute inset-y-0 right-0 w-full max-w-sm bg-gradient-to-b from-navy-900 to-navy-950 shadow-2xl transition-transform duration-500 ease-out ${
-                        isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
-                    }`}
+                    className={`absolute inset-y-0 right-0 w-full max-w-sm bg-gradient-to-b from-navy-900 to-navy-950 shadow-2xl transition-transform duration-500 ease-out ${isMobileMenuOpen ? 'translate-x-0' : 'translate-x-full'
+                        }`}
                 >
                     {/* Decorative Background */}
                     <div className="absolute inset-0 overflow-hidden">
@@ -199,29 +189,27 @@ export default function Header() {
                                     key={link.name}
                                     href={link.href}
                                     onClick={() => setIsMobileMenuOpen(false)}
-                                    className={`group flex items-center gap-4 py-4 px-4 rounded-xl text-xl font-semibold transition-all duration-300 ${
-                                        activeSection === link.href.replace('#', '')
+                                    className={`group flex items-center gap-4 py-4 px-4 rounded-xl text-xl font-semibold transition-all duration-300 ${activeSection === link.href.replace('#', '')
                                             ? 'bg-white/10 text-white'
                                             : 'text-white/70 hover:bg-white/5 hover:text-white'
-                                    }`}
+                                        }`}
                                     style={{
                                         transitionDelay: isMobileMenuOpen ? `${index * 50}ms` : '0ms',
                                         transform: isMobileMenuOpen ? 'translateX(0)' : 'translateX(20px)',
                                         opacity: isMobileMenuOpen ? 1 : 0,
                                     }}
                                 >
-                                    <span className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                                        activeSection === link.href.replace('#', '')
+                                    <span className={`w-1.5 h-1.5 rounded-full transition-colors ${activeSection === link.href.replace('#', '')
                                             ? 'bg-accent-500'
                                             : 'bg-white/30 group-hover:bg-accent-400'
-                                    }`} />
+                                        }`} />
                                     {link.name}
                                 </Link>
                             ))}
                         </nav>
 
                         {/* CTA Button */}
-                        <div 
+                        <div
                             className="pt-6 border-t border-white/10"
                             style={{
                                 transitionDelay: isMobileMenuOpen ? '300ms' : '0ms',
@@ -239,14 +227,14 @@ export default function Header() {
                         </div>
 
                         {/* Contact Info */}
-                        <div 
+                        <div
                             className="mt-8 text-center"
                             style={{
                                 transitionDelay: isMobileMenuOpen ? '350ms' : '0ms',
                                 opacity: isMobileMenuOpen ? 1 : 0,
                             }}
                         >
-                            <p className="text-white/40 text-sm">contact@tech-solution.tn</p>
+                            <a href="mailto:contact@techsolution-group.com" className="text-white/40 text-sm hover:text-white transition-colors">contact@techsolution-group.com</a>
                         </div>
                     </div>
                 </div>

@@ -88,7 +88,7 @@ export default function AdminLogin() {
                                     onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                                     required
                                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#d9140e] focus:border-transparent outline-none transition-all"
-                                    placeholder="admin@tech-solution.tn"
+                                    placeholder="admin@techsolution-group.com"
                                 />
                             </div>
                         </div>
