@@ -27,9 +27,15 @@ const stats = [
     },
 ];
 
+import RevealOnScroll from './ui/RevealOnScroll';
+
+// ... (stats array)
+
 export default function Hero() {
     return (
         <section id="hero" className="relative min-h-screen flex flex-col overflow-hidden">
+            {/* ... (keep background video/content) */}
+
             {/* Background Video */}
             <div className="absolute inset-0 z-0">
                 <video
@@ -117,41 +123,41 @@ export default function Hero() {
                 <div className="container">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 max-w-4xl mx-auto px-4 -mt-20">
                         {stats.map((stat, index) => (
-                            <div
-                                key={index}
-                                className="group relative bg-white rounded-2xl p-6 shadow-xl shadow-[#31486a]/10 hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-[#39547c]/10 overflow-hidden animate-fade-in-up"
-                                style={{ animationDelay: `${400 + index * 100}ms` }}
-                            >
-                                {/* Hover Gradient */}
-                                <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${stat.accent
-                                    ? 'bg-gradient-to-br from-[#d9140e]/5 to-transparent'
-                                    : 'bg-gradient-to-br from-[#39547c]/5 to-transparent'
-                                    }`} />
+                            <RevealOnScroll key={index} delay={400 + index * 100} width="100%">
+                                <div
+                                    className="group relative bg-white rounded-2xl p-6 shadow-xl shadow-[#31486a]/10 hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border border-[#39547c]/10 overflow-hidden h-full"
+                                >
+                                    {/* Hover Gradient */}
+                                    <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ${stat.accent
+                                        ? 'bg-gradient-to-br from-[#d9140e]/5 to-transparent'
+                                        : 'bg-gradient-to-br from-[#39547c]/5 to-transparent'
+                                        }`} />
 
-                                <div className="relative flex items-center gap-4">
-                                    {/* Icon */}
-                                    <div className={`shrink-0 p-3 rounded-xl transition-all duration-300 group-hover:scale-110 ${stat.accent
-                                        ? 'bg-[#d9140e] text-white shadow-lg shadow-[#d9140e]/30'
-                                        : 'bg-[#39547c] text-white shadow-lg shadow-[#39547c]/30'
-                                        }`}>
-                                        <stat.icon className="w-6 h-6" strokeWidth={1.5} />
-                                    </div>
-
-                                    {/* Text */}
-                                    <div className="text-right flex-1">
-                                        <div className={`text-3xl font-bold mb-0.5 ${stat.accent ? 'text-[#d9140e]' : 'text-[#39547c]'
+                                    <div className="relative flex items-center gap-4">
+                                        {/* Icon */}
+                                        <div className={`shrink-0 p-3 rounded-xl transition-all duration-300 group-hover:scale-110 ${stat.accent
+                                            ? 'bg-[#d9140e] text-white shadow-lg shadow-[#d9140e]/30'
+                                            : 'bg-[#39547c] text-white shadow-lg shadow-[#39547c]/30'
                                             }`}>
-                                            {stat.value}
+                                            <stat.icon className="w-6 h-6" strokeWidth={1.5} />
                                         </div>
-                                        <div className="text-black font-semibold text-sm">
-                                            {stat.label}
-                                        </div>
-                                        <div className="text-[#39547c]/60 text-xs uppercase tracking-wider mt-0.5">
-                                            {stat.sublabel}
+
+                                        {/* Text */}
+                                        <div className="text-right flex-1">
+                                            <div className={`text-3xl font-bold mb-0.5 ${stat.accent ? 'text-[#d9140e]' : 'text-[#39547c]'
+                                                }`}>
+                                                {stat.value}
+                                            </div>
+                                            <div className="text-black font-semibold text-sm">
+                                                {stat.label}
+                                            </div>
+                                            <div className="text-[#39547c]/60 text-xs uppercase tracking-wider mt-0.5">
+                                                {stat.sublabel}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            </RevealOnScroll>
                         ))}
                     </div>
                 </div>

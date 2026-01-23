@@ -18,6 +18,10 @@ const partners = [
     { id: 11, image: '/partners/11.jpg', alt: 'Partner 11' },
 ];
 
+import RevealOnScroll from './ui/RevealOnScroll';
+
+// ... (partners array)
+
 export default function Partners() {
 
     return (
@@ -30,7 +34,7 @@ export default function Partners() {
 
             <div className="container relative z-10">
                 {/* Section Header */}
-                <div className="text-center mb-16">
+                <RevealOnScroll className="text-center mb-16" width="100%">
                     {/* Label */}
                     <div className="inline-flex items-center gap-2 mb-6">
                         <span className="w-8 h-0.5 bg-accent-500 rounded-full" />
@@ -47,10 +51,10 @@ export default function Partners() {
                     <p className="text-navy-500 max-w-xl mx-auto">
                         نفتخر بثقة كبرى المؤسسات الحكومية والخاصة في تونس
                     </p>
-                </div>
+                </RevealOnScroll>
 
                 {/* Partners Marquee - CSS Infinite Scroll */}
-                <div className="relative group overflow-hidden">
+                <RevealOnScroll className="relative group overflow-hidden" width="100%" delay={200}>
                     {/* Gradient Masks */}
                     <div className="absolute inset-y-0 left-0 w-12 md:w-32 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
                     <div className="absolute inset-y-0 right-0 w-12 md:w-32 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
@@ -76,7 +80,7 @@ export default function Partners() {
                             </div>
                         ))}
                     </div>
-                </div>
+                </RevealOnScroll>
 
                 {/* Trust Badges */}
                 <div className="mt-16 flex flex-wrap items-center justify-center gap-6">
@@ -85,13 +89,14 @@ export default function Partners() {
                         { label: 'شركات خاصة', count: '+20' },
                         { label: 'منظمات دولية', count: '+10' },
                     ].map((badge, i) => (
-                        <div
-                            key={i}
-                            className="flex items-center gap-3 px-6 py-3 bg-navy-50 rounded-full border border-navy-100"
-                        >
-                            <span className="text-2xl font-bold text-accent-500">{badge.count}</span>
-                            <span className="text-navy-600 font-medium">{badge.label}</span>
-                        </div>
+                        <RevealOnScroll key={i} delay={400 + (i * 100)}>
+                            <div
+                                className="flex items-center gap-3 px-6 py-3 bg-navy-50 rounded-full border border-navy-100"
+                            >
+                                <span className="text-2xl font-bold text-accent-500">{badge.count}</span>
+                                <span className="text-navy-600 font-medium">{badge.label}</span>
+                            </div>
+                        </RevealOnScroll>
                     ))}
                 </div>
             </div>

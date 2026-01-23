@@ -76,6 +76,10 @@ const services = [
     }
 ];
 
+import RevealOnScroll from './ui/RevealOnScroll';
+
+// ... (keep services array)
+
 export default function Services() {
     return (
         <section id="services" className="section bg-navy-50 relative overflow-hidden">
@@ -87,7 +91,7 @@ export default function Services() {
 
             <div className="container relative z-10">
                 {/* Section Header */}
-                <div className="text-center max-w-3xl mx-auto mb-16">
+                <RevealOnScroll className="text-center max-w-3xl mx-auto mb-16" width="100%">
                     {/* Label */}
                     <div className="inline-flex items-center gap-2 mb-6">
                         <span className="w-8 h-0.5 bg-accent-500 rounded-full" />
@@ -104,100 +108,99 @@ export default function Services() {
                     <p className="text-lg text-navy-600 leading-relaxed">
                         أربعة محاور متكاملة لخدمة مؤسستكم — حلول رقمية، اتصال مؤسساتي، فعاليات، وتكوين يضمن استدامة الأثر.
                     </p>
-                </div>
+                </RevealOnScroll>
 
                 {/* Services Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
                     {services.map((service, index) => (
-                        <div
-                            key={service.id}
-                            className="group relative rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 border border-navy-100 hover:border-navy-200 overflow-hidden"
-                        >
-                            {/* Background Image */}
+                        <RevealOnScroll key={service.id} delay={index * 100} width="100%">
                             <div
-                                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-                                style={{ backgroundImage: `url(${service.backgroundImage})` }}
-                            />
+                                className="group relative rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-500 border border-navy-100 hover:border-navy-200 overflow-hidden h-full"
+                            >
+                                {/* Background Image */}
+                                <div
+                                    className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                                    style={{ backgroundImage: `url(${service.backgroundImage})` }}
+                                />
 
-                            {/* Dark Overlay with #0f172a */}
-                            <div className="absolute inset-0 bg-[#0f172a]/95" />
+                                {/* Dark Overlay with #0f172a */}
+                                <div className="absolute inset-0 bg-[#0f172a]/95" />
 
-                            {/* Background Number */}
-                            <div className="absolute top-4 left-4 text-[120px] font-bold text-white/10 leading-none pointer-events-none select-none group-hover:text-accent-500/10 transition-colors duration-500">
-                                {service.number}
-                            </div>
+                                {/* Background Number */}
+                                <div className="absolute top-4 left-4 text-[120px] font-bold text-white/10 leading-none pointer-events-none select-none group-hover:text-accent-500/10 transition-colors duration-500">
+                                    {service.number}
+                                </div>
 
-                            {/* Content */}
-                            <div className="relative">
-                                {/* Header */}
-                                <div className="flex items-start justify-between mb-6">
-                                    {/* Icon */}
-                                    <div className={`p-4 rounded-xl bg-gradient-to-br ${service.gradient} ${service.iconColor === 'white' ? 'text-white' : 'text-white'} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                                        <service.icon className="w-7 h-7" strokeWidth={1.5} />
+                                {/* Content */}
+                                <div className="relative">
+                                    {/* Header */}
+                                    <div className="flex items-start justify-between mb-6">
+                                        {/* Icon */}
+                                        <div className={`p-4 rounded-xl bg-gradient-to-br ${service.gradient} ${service.iconColor === 'white' ? 'text-white' : 'text-white'} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                                            <service.icon className="w-7 h-7" strokeWidth={1.5} />
+                                        </div>
                                     </div>
 
+                                    {/* Title & Subtitle */}
+                                    <h3 className="text-2xl font-bold text-white mb-1 group-hover:text-accent-300 transition-colors" style={{ color: '#ffffff' }}>
+                                        {service.title}
+                                    </h3>
+                                    <span className="text-sm font-medium text-white/70 uppercase tracking-wider block mb-4">
+                                        {service.subtitle}
+                                    </span>
 
+                                    {/* Short Description */}
+                                    <p className="text-accent-300 font-medium mb-4" style={{ color: '#ffffff' }}>
+                                        {service.description}
+                                    </p>
+
+                                    {/* Long Description */}
+                                    <p className="text-white/90 mb-6 leading-relaxed" style={{ color: '#ffffff' }}>
+                                        {service.longDescription}
+                                    </p>
+
+                                    {/* Features List */}
+                                    <ul className="space-y-3 mb-8">
+                                        {service.features.map((feature, i) => (
+                                            <li key={i} className="flex items-center gap-3 text-sm text-white/90">
+                                                <CheckCircle2 className="w-5 h-5 text-accent-300 flex-shrink-0" />
+                                                {feature}
+                                            </li>
+                                        ))}
+                                    </ul>
+
+                                    {/* Footer */}
+                                    <div className="flex items-center justify-between pt-6 border-t border-white/20">
+                                        {/* Highlight Badge - Only show if highlight is not empty */}
+                                        {service.highlight && (
+                                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-white/10 px-3 py-1.5 rounded-full">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-accent-300" />
+                                                {service.highlight}
+                                            </span>
+                                        )}
+
+                                        {/* CTA Link */}
+                                        <Link
+                                            href={`#${service.id}`}
+                                            className="group/link inline-flex items-center gap-2 text-white font-semibold hover:text-accent-300 transition-colors"
+                                        >
+                                            اكتشف المزيد
+                                            <ArrowLeft className="w-4 h-4 transition-transform group-hover/link:-translate-x-1" />
+                                        </Link>
+                                    </div>
                                 </div>
 
-                                {/* Title & Subtitle */}
-                                <h3 className="text-2xl font-bold text-white mb-1 group-hover:text-accent-300 transition-colors" style={{ color: '#ffffff' }}>
-                                    {service.title}
-                                </h3>
-                                <span className="text-sm font-medium text-white/70 uppercase tracking-wider block mb-4">
-                                    {service.subtitle}
-                                </span>
-
-                                {/* Short Description */}
-                                <p className="text-accent-300 font-medium mb-4" style={{ color: '#ffffff' }}>
-                                    {service.description}
-                                </p>
-
-                                {/* Long Description */}
-                                <p className="text-white/90 mb-6 leading-relaxed" style={{ color: '#ffffff' }}>
-                                    {service.longDescription}
-                                </p>
-
-                                {/* Features List */}
-                                <ul className="space-y-3 mb-8">
-                                    {service.features.map((feature, i) => (
-                                        <li key={i} className="flex items-center gap-3 text-sm text-white/90">
-                                            <CheckCircle2 className="w-5 h-5 text-accent-300 flex-shrink-0" />
-                                            {feature}
-                                        </li>
-                                    ))}
-                                </ul>
-
-                                {/* Footer */}
-                                <div className="flex items-center justify-between pt-6 border-t border-white/20">
-                                    {/* Highlight Badge - Only show if highlight is not empty */}
-                                    {service.highlight && (
-                                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-white/10 px-3 py-1.5 rounded-full">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-accent-300" />
-                                            {service.highlight}
-                                        </span>
-                                    )}
-
-                                    {/* CTA Link */}
-                                    <Link
-                                        href={`#${service.id}`}
-                                        className="group/link inline-flex items-center gap-2 text-white font-semibold hover:text-accent-300 transition-colors"
-                                    >
-                                        اكتشف المزيد
-                                        <ArrowLeft className="w-4 h-4 transition-transform group-hover/link:-translate-x-1" />
-                                    </Link>
+                                {/* Hover Gradient Border */}
+                                <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none`}>
+                                    <div className={`absolute inset-0 rounded-2xl border-2 border-transparent bg-gradient-to-br ${service.gradient} opacity-20`} style={{ WebkitMaskImage: 'linear-gradient(white, white)', maskImage: 'linear-gradient(white, white)', WebkitMaskClip: 'padding-box', WebkitMaskComposite: 'xor' }} />
                                 </div>
                             </div>
-
-                            {/* Hover Gradient Border */}
-                            <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none`}>
-                                <div className={`absolute inset-0 rounded-2xl border-2 border-transparent bg-gradient-to-br ${service.gradient} opacity-20`} style={{ WebkitMaskImage: 'linear-gradient(white, white)', maskImage: 'linear-gradient(white, white)', WebkitMaskClip: 'padding-box', WebkitMaskComposite: 'xor' }} />
-                            </div>
-                        </div>
+                        </RevealOnScroll>
                     ))}
                 </div>
 
                 {/* Bottom CTA */}
-                <div className="mt-16 text-center">
+                <RevealOnScroll className="mt-16 text-center" width="100%" delay={200}>
                     <p className="text-navy-600 mb-6">
                         هل لديك مشروع محدد؟ نحن هنا لمساعدتك
                     </p>
@@ -208,7 +211,7 @@ export default function Services() {
                         تحدث مع فريقنا
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
-                </div>
+                </RevealOnScroll>
             </div>
         </section>
     );

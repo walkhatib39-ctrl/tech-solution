@@ -1,6 +1,7 @@
 'use client';
 
 import { Shield, Target, Users, Clock, Award, Headphones } from 'lucide-react';
+import RevealOnScroll from './ui/RevealOnScroll';
 
 const reasons = [
     {
@@ -62,7 +63,7 @@ export default function WhyUs() {
 
             <div className="container relative z-10">
                 {/* Section Header */}
-                <div className="text-center max-w-3xl mx-auto mb-16">
+                <RevealOnScroll className="text-center max-w-3xl mx-auto mb-16" width="100%">
                     {/* Label */}
                     <div className="inline-flex items-center gap-3 mb-6">
                         <span className="w-8 h-0.5 bg-accent-500/50 rounded-full" />
@@ -82,7 +83,7 @@ export default function WhyUs() {
                         نشتغل بمنطق الشراكة طويلة المدى — وضوح، سرعة، ونتائج قابلة للقياس.
                         نحن لا نقدم خدمات فحسب، بل نحمل عنكم عبء التنفيذ والتعقيد التقني.
                     </p>
-                </div>
+                </RevealOnScroll>
 
                 {/* Reasons Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
