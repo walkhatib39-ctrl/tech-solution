@@ -3,7 +3,10 @@ import {
   isProjectsAuthError,
   requireProjectsAuth,
 } from "@/lib/projectsAuth";
-import { getProjectsData, saveProjectsData } from "@/lib/projectsStore";
+import {
+  getProjectsDataForUser,
+  saveProjectsDataForUser,
+} from "@/lib/projectsStore";
 
 function unauthorizedResponse() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -11,11 +14,12 @@ function unauthorizedResponse() {
 
 export async function GET() {
   try {
-    await requireProjectsAuth();
+    const currentUser = await requireProjectsAuth();
 
     return NextResponse.json({
       success: true,
-      data: await getProjectsData(),
+      currentUser,
+      data: await getProjectsDataForUser(currentUser),
     });
   } catch (error) {
     if (isProjectsAuthError(error)) {
@@ -32,7 +36,7 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    await requireProjectsAuth();
+    const currentUser = await requireProjectsAuth();
 
     const body = await request.json();
 
@@ -45,7 +49,8 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: await saveProjectsData(body),
+      currentUser,
+      data: await saveProjectsDataForUser(body, currentUser),
     });
   } catch (error) {
     if (isProjectsAuthError(error)) {

@@ -22,6 +22,7 @@ import {
   FolderPlus,
   Loader2,
   LogOut,
+  Mail,
   Pencil,
   Plus,
   Save,
@@ -30,10 +31,12 @@ import {
   Trash2,
   TrendingUp,
   User,
+  Users,
   X,
   Zap,
 } from "lucide-react";
 import {
+  CurrentProjectUser,
   ManagedProject,
   ManagedTask,
   PROJECT_STATUSES,
@@ -41,6 +44,7 @@ import {
   ProjectDocFile,
   ProjectDocFolder,
   ProjectTrackingField,
+  ProjectTeamUser,
   ProjectUpdate,
   ProjectsData,
   TASK_PRIORITIES,
@@ -57,13 +61,13 @@ import {
 type SaveState = "idle" | "saving" | "saved" | "error";
 type StatusFilter = TaskStatus | "Tous";
 type ResponsibleFilter = string | "Tous";
-type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Suivi";
+type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Suivi" | "Équipe";
 type ProjectStats = { blocked: number; done: number; overdue: number; progress: number; total: number };
 type TaskSectionGroup = { id: string | null; color: string; name: string; tasks: ManagedTask[] };
 
 const EMPTY_DATA: ProjectsData = {
   projects: [], taskSections: [], tasks: [], docFolders: [], docFiles: [],
-  trackingFields: [], updates: [], updatedAt: "",
+  trackingFields: [], updates: [], teamUsers: [], projectAccess: [], updatedAt: "",
 };
 
 // ─── Style maps ─────────────────────────────────────────────────────────────
@@ -103,6 +107,7 @@ const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType }> = [
   { label: "Tâches",   icon: Columns3          },
   { label: "Docs",     icon: BookOpen          },
   { label: "Suivi",    icon: BarChart3         },
+  { label: "Équipe",   icon: Users             },
 ];
 
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
@@ -152,11 +157,15 @@ function buildTrackingTemplate(project: ManagedProject): ProjectTrackingField[] 
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-interface ProjectsManagerProps { logoutAction: () => Promise<void> }
+interface ProjectsManagerProps {
+  currentUser: CurrentProjectUser;
+  logoutAction: () => Promise<void>;
+}
 interface ProjectFormState { name: string; type: ManagedProject["type"]; color: string; status: ManagedProject["status"] }
 
-export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) {
+export default function ProjectsManager({ currentUser: initialUser, logoutAction }: ProjectsManagerProps) {
   const [data, setData] = useState<ProjectsData>(EMPTY_DATA);
+  const [currentUser, setCurrentUser] = useState<CurrentProjectUser>(initialUser);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [activeTab, setActiveTab] = useState<ProjectTab>("Pilotage");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("Tous");
@@ -171,6 +180,7 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
   const [showAddProject, setShowAddProject] = useState(false);
   const [projectForm, setProjectForm] = useState<ProjectFormState>({ name: "", type: "DEV", color: "#1e3a5f", status: "Actif" });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSuperAdmin = currentUser.role === "super_admin";
 
   const persistData = useCallback((nextData: ProjectsData) => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -183,6 +193,9 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
         });
         if (r.status === 401) { window.location.reload(); return; }
         if (!r.ok) throw new Error("Save failed");
+        const p = (await r.json()) as { currentUser?: CurrentProjectUser; data?: ProjectsData; success: boolean };
+        if (p.currentUser) setCurrentUser(p.currentUser);
+        if (p.data) setData(p.data);
         setSaveState("saved");
       } catch (e) { console.error(e); setSaveState("error"); }
     }, 450);
@@ -202,8 +215,9 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
       const r = await fetch("/api/projects", { cache: "no-store" });
       if (r.status === 401) { window.location.reload(); return; }
       if (!r.ok) throw new Error("Load failed");
-      const p = (await r.json()) as { data: ProjectsData; success: boolean };
+      const p = (await r.json()) as { currentUser: CurrentProjectUser; data: ProjectsData; success: boolean };
       setData(p.data);
+      setCurrentUser(p.currentUser);
       setSelectedProjectId(p.data.projects[0]?.id ?? "");
       setSaveState("saved");
     } catch (e) { console.error(e); setLoadError("Impossible de charger les projets."); }
@@ -219,6 +233,12 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
     if (!data.projects.some((p) => p.id === selectedProjectId))
       setSelectedProjectId(data.projects[0]?.id ?? "");
   }, [data.projects, selectedProjectId]);
+
+  useEffect(() => {
+    if (!isSuperAdmin && activeTab === "Équipe") {
+      setActiveTab("Pilotage");
+    }
+  }, [activeTab, isSuperAdmin]);
 
   const selectedProject  = useMemo(() => data.projects.find((p) => p.id === selectedProjectId) ?? data.projects[0], [data.projects, selectedProjectId]);
   const projectTasks     = useMemo(() => !selectedProject ? [] : data.tasks.filter((t) => t.projectId === selectedProject.id), [data.tasks, selectedProject]);
@@ -293,7 +313,7 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
 
   const handleAddProject = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!projectForm.name.trim()) return;
+    if (!isSuperAdmin || !projectForm.name.trim()) return;
     const proj: ManagedProject = { id: createId("project"), name: projectForm.name.trim(), type: projectForm.type, color: projectForm.color, status: projectForm.status, health: "Bon", progress: 0, nextAction: "", blockers: "", lastUpdate: "" };
     updateData((c) => ({ ...c, projects: [...c.projects, proj], trackingFields: [...c.trackingFields, ...buildTrackingTemplate(proj)] }));
     setSelectedProjectId(proj.id);
@@ -351,6 +371,52 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
   const handleDeleteTracking    = (id: string) => updateData((c) => ({ ...c, trackingFields: c.trackingFields.filter((f) => f.id !== id) }));
   const handleAddUpdate         = (u: Omit<ProjectUpdate, "id">) => { if (!u.title.trim()) return; updateData((c) => ({ ...c, updates: [{ ...u, id: createId("update"), title: u.title.trim() }, ...c.updates] })); };
   const handleDeleteUpdate      = (id: string) => updateData((c) => ({ ...c, updates: c.updates.filter((u) => u.id !== id) }));
+  const handleAddTeamUser       = (user: Omit<ProjectTeamUser, "id" | "role" | "isActive">) => {
+    if (!isSuperAdmin || !user.name.trim() || !user.email.trim()) return;
+    updateData((c) => ({
+      ...c,
+      teamUsers: [
+        ...c.teamUsers,
+        {
+          id: createId("user"),
+          name: user.name.trim(),
+          email: user.email.trim().toLowerCase(),
+          role: "member",
+          isActive: true,
+          password: user.password?.trim() || undefined,
+        },
+      ],
+    }));
+  };
+  const handleUpdateTeamUser    = (id: string, patch: Partial<ProjectTeamUser>) => {
+    if (!isSuperAdmin) return;
+    updateData((c) => ({
+      ...c,
+      teamUsers: c.teamUsers.map((user) =>
+        user.id === id
+          ? {
+              ...user,
+              ...patch,
+              email: patch.email ? patch.email.trim().toLowerCase() : user.email,
+              name: patch.name ?? user.name,
+              password: patch.password?.trim() || undefined,
+            }
+          : user
+      ),
+    }));
+  };
+  const handleToggleProjectAccess = (userId: string, projectId: string) => {
+    if (!isSuperAdmin) return;
+    updateData((c) => {
+      const exists = c.projectAccess.some((access) => access.userId === userId && access.projectId === projectId);
+      return {
+        ...c,
+        projectAccess: exists
+          ? c.projectAccess.filter((access) => !(access.userId === userId && access.projectId === projectId))
+          : [...c.projectAccess, { userId, projectId }],
+      };
+    });
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -397,39 +463,49 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
           </div>
         </div>
 
-        {/* Add project (collapsible) */}
-        <div className="border-t border-white/[0.06] px-3 py-3">
-          <button onClick={() => setShowAddProject((v) => !v)} type="button"
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/40 transition hover:bg-white/[0.05] hover:text-white/70">
-            <Plus className="h-4 w-4" />
-            <span className="flex-1 text-left">Nouveau projet</span>
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAddProject ? "rotate-180" : ""}`} />
-          </button>
-          {showAddProject && (
-            <form onSubmit={handleAddProject} className="mt-2 space-y-2 rounded-xl bg-white/[0.05] p-3">
-              <input
-                className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.07] px-3 text-sm text-white placeholder-white/25 outline-none focus:border-[#d9140e]/50 focus:bg-white/10"
-                onChange={(e) => setProjectForm((c) => ({ ...c, name: e.target.value }))}
-                placeholder="Nom du projet" value={projectForm.name}
-              />
-              <div className="grid grid-cols-[1fr_34px] gap-2">
-                <select className="h-8 rounded-lg border border-white/10 bg-white/[0.07] px-2 text-sm text-white/70 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, type: e.target.value as ManagedProject["type"] }))} value={projectForm.type}>
-                  {PROJECT_TYPES.map((t) => <option key={t} value={t} className="bg-[#0d1b2a]">{t}</option>)}
+        {isSuperAdmin && (
+          <div className="border-t border-white/[0.06] px-3 py-3">
+            <button onClick={() => setShowAddProject((v) => !v)} type="button"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/40 transition hover:bg-white/[0.05] hover:text-white/70">
+              <Plus className="h-4 w-4" />
+              <span className="flex-1 text-left">Nouveau projet</span>
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAddProject ? "rotate-180" : ""}`} />
+            </button>
+            {showAddProject && (
+              <form onSubmit={handleAddProject} className="mt-2 space-y-2 rounded-xl bg-white/[0.05] p-3">
+                <input
+                  className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.07] px-3 text-sm text-white placeholder-white/25 outline-none focus:border-[#d9140e]/50 focus:bg-white/10"
+                  onChange={(e) => setProjectForm((c) => ({ ...c, name: e.target.value }))}
+                  placeholder="Nom du projet" value={projectForm.name}
+                />
+                <div className="grid grid-cols-[1fr_34px] gap-2">
+                  <select className="h-8 rounded-lg border border-white/10 bg-white/[0.07] px-2 text-sm text-white/70 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, type: e.target.value as ManagedProject["type"] }))} value={projectForm.type}>
+                    {PROJECT_TYPES.map((t) => <option key={t} value={t} className="bg-[#0d1b2a]">{t}</option>)}
+                  </select>
+                  <input aria-label="Couleur" type="color" className="h-8 rounded-lg border border-white/10 bg-white/[0.07] p-0.5" onChange={(e) => setProjectForm((c) => ({ ...c, color: e.target.value }))} value={projectForm.color} />
+                </div>
+                <select className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.07] px-2 text-sm text-white/70 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, status: e.target.value as ManagedProject["status"] }))} value={projectForm.status}>
+                  {PROJECT_STATUSES.map((s) => <option key={s} value={s} className="bg-[#0d1b2a]">{s}</option>)}
                 </select>
-                <input aria-label="Couleur" type="color" className="h-8 rounded-lg border border-white/10 bg-white/[0.07] p-0.5" onChange={(e) => setProjectForm((c) => ({ ...c, color: e.target.value }))} value={projectForm.color} />
-              </div>
-              <select className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.07] px-2 text-sm text-white/70 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, status: e.target.value as ManagedProject["status"] }))} value={projectForm.status}>
-                {PROJECT_STATUSES.map((s) => <option key={s} value={s} className="bg-[#0d1b2a]">{s}</option>)}
-              </select>
-              <button type="submit" className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#d9140e] text-sm font-semibold text-white hover:bg-[#b91010]">
-                <Plus className="h-3.5 w-3.5" /> Créer
-              </button>
-            </form>
-          )}
-        </div>
+                <button type="submit" className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#d9140e] text-sm font-semibold text-white hover:bg-[#b91010]">
+                  <Plus className="h-3.5 w-3.5" /> Créer
+                </button>
+              </form>
+            )}
+          </div>
+        )}
 
         {/* Logout */}
         <div className="border-t border-white/[0.06] px-3 py-3">
+          <div className="mb-2 flex min-w-0 items-center gap-2 rounded-lg px-3 py-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-white/50">
+              <User className="h-3.5 w-3.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold text-white/70">{currentUser.name}</p>
+              <p className="truncate text-[10px] text-white/25">{currentUser.role === "super_admin" ? "Super admin" : "Membre"}</p>
+            </div>
+          </div>
           <form action={logoutAction}>
             <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/35 transition hover:bg-white/[0.05] hover:text-white/60">
               <LogOut className="h-4 w-4" /> Déconnexion
@@ -498,7 +574,7 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
                 {/* Tab bar */}
                 <div className="mt-5 flex items-end justify-between">
                   <nav className="flex">
-                    {PROJECT_TABS.map(({ label, icon: Icon }) => {
+                    {PROJECT_TABS.filter((tab) => isSuperAdmin || tab.label !== "Équipe").map(({ label, icon: Icon }) => {
                       const active = activeTab === label;
                       return (
                         <button key={label} onClick={() => setActiveTab(label)} type="button"
@@ -570,6 +646,16 @@ export default function ProjectsManager({ logoutAction }: ProjectsManagerProps) 
               {activeTab === "Tâches"   && <TachesTab groups={taskGroups} onChangeStatus={handleChangeTaskStatus} onDeleteSection={handleDeleteTaskSection} onDeleteTask={handleDeleteTask} onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }} />}
               {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
               {activeTab === "Suivi"    && <SuiviTab fields={trackingFields} updates={projectUpdates} project={selectedProject} onAddField={handleAddTracking} onUpdateField={handleUpdateTracking} onDeleteField={handleDeleteTracking} onAddUpdate={handleAddUpdate} onDeleteUpdate={handleDeleteUpdate} />}
+              {activeTab === "Équipe" && isSuperAdmin && (
+                <TeamTab
+                  onAddUser={handleAddTeamUser}
+                  onToggleProjectAccess={handleToggleProjectAccess}
+                  onUpdateUser={handleUpdateTeamUser}
+                  projectAccess={data.projectAccess}
+                  projects={data.projects}
+                  users={data.teamUsers}
+                />
+              )}
             </div>
           ) : (
             <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
@@ -1350,6 +1436,151 @@ function SuiviTab({ fields, updates, project, onAddField, onUpdateField, onDelet
           {!updates.length && <EmptyState label="Aucun historique." small />}
         </div>
       </aside>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── TEAM TAB ────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
+function TeamTab({ onAddUser, onToggleProjectAccess, onUpdateUser, projectAccess, projects, users }: {
+  onAddUser: (user: Omit<ProjectTeamUser, "id" | "role" | "isActive">) => void;
+  onToggleProjectAccess: (userId: string, projectId: string) => void;
+  onUpdateUser: (id: string, patch: Partial<ProjectTeamUser>) => void;
+  projectAccess: ProjectsData["projectAccess"];
+  projects: ManagedProject[];
+  users: ProjectTeamUser[];
+}) {
+  const [newUser, setNewUser] = useState({ email: "", name: "", password: "" });
+  const sortedUsers = [...users].sort((a, b) => {
+    if (a.role !== b.role) return a.role === "super_admin" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return (
+    <div className="grid gap-5 border-t border-slate-100 p-5 xl:grid-cols-[320px_1fr]">
+      <aside className="space-y-4">
+        <form
+          className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onAddUser(newUser);
+            setNewUser({ email: "", name: "", password: "" });
+          }}
+        >
+          <div className="mb-4 flex items-center gap-2">
+            <Users className="h-4 w-4 text-[#d9140e]" />
+            <p className="text-sm font-bold text-slate-800">Nouveau membre</p>
+          </div>
+          <div className="space-y-2.5">
+            <input
+              className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40"
+              onChange={(e) => setNewUser((c) => ({ ...c, name: e.target.value }))}
+              placeholder="Nom"
+              value={newUser.name}
+            />
+            <input
+              className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40"
+              onChange={(e) => setNewUser((c) => ({ ...c, email: e.target.value }))}
+              placeholder="email@domaine.com"
+              type="email"
+              value={newUser.email}
+            />
+            <input
+              className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40"
+              onChange={(e) => setNewUser((c) => ({ ...c, password: e.target.value }))}
+              placeholder="Mot de passe initial"
+              type="password"
+              value={newUser.password}
+            />
+            <button
+              type="submit"
+              disabled={!newUser.name.trim() || !newUser.email.trim()}
+              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-[#d9140e] text-sm font-semibold text-white transition hover:bg-[#b91010] disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5" /> Ajouter
+            </button>
+          </div>
+        </form>
+
+        <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Membres actifs</p>
+          <p className="mt-2 text-3xl font-bold text-slate-800">{users.filter((user) => user.isActive).length}</p>
+        </div>
+      </aside>
+
+      <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="grid grid-cols-[260px_1fr_110px] gap-0 border-b border-slate-100 bg-slate-50/80 px-5 py-2.5">
+          {["Membre", "Projets visibles", "Statut"].map((h) => (
+            <div key={h} className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{h}</div>
+          ))}
+        </div>
+        <div className="divide-y divide-slate-100">
+          {sortedUsers.map((user) => {
+            const isAdmin = user.role === "super_admin";
+            return (
+              <div key={user.id} className="grid grid-cols-[260px_1fr_110px] gap-0 px-5 py-4">
+                <div className="min-w-0 pr-5">
+                  <input
+                    className="mb-1 h-8 w-full rounded-lg border border-transparent bg-transparent px-2 text-sm font-semibold text-slate-800 outline-none focus:border-slate-200 focus:bg-white"
+                    disabled={isAdmin}
+                    onChange={(e) => onUpdateUser(user.id, { name: e.target.value })}
+                    value={user.name}
+                  />
+                  <div className="flex min-w-0 items-center gap-1.5 px-2 text-xs text-slate-400">
+                    <Mail className="h-3 w-3 shrink-0" />
+                    <input
+                      className="min-w-0 flex-1 bg-transparent outline-none focus:text-slate-600"
+                      disabled={isAdmin}
+                      onChange={(e) => onUpdateUser(user.id, { email: e.target.value })}
+                      value={user.email}
+                    />
+                  </div>
+                  <span className={`ml-2 mt-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${isAdmin ? "bg-[#0d1b2a] text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {isAdmin ? "Super admin" : "Membre"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 pr-5">
+                  {isAdmin ? (
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Tous les projets</span>
+                  ) : projects.map((project) => {
+                    const checked = projectAccess.some((access) => access.userId === user.id && access.projectId === project.id);
+                    return (
+                      <label
+                        key={project.id}
+                        className={`flex h-8 cursor-pointer items-center gap-2 rounded-full border px-3 text-xs font-semibold transition ${checked ? "border-[#0d1b2a] bg-[#0d1b2a] text-white" : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}
+                      >
+                        <input
+                          checked={checked}
+                          className="sr-only"
+                          onChange={() => onToggleProjectAccess(user.id, project.id)}
+                          type="checkbox"
+                        />
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: project.color }} />
+                        {project.name}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="flex items-start justify-end">
+                  <label className={`flex h-8 items-center gap-2 rounded-full px-3 text-xs font-semibold ${user.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"} ${isAdmin ? "opacity-60" : "cursor-pointer"}`}>
+                    <input
+                      checked={user.isActive}
+                      className="sr-only"
+                      disabled={isAdmin}
+                      onChange={(e) => onUpdateUser(user.id, { isActive: e.target.checked })}
+                      type="checkbox"
+                    />
+                    <span className={`h-2 w-2 rounded-full ${user.isActive ? "bg-emerald-400" : "bg-slate-300"}`} />
+                    {user.isActive ? "Actif" : "Inactif"}
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

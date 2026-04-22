@@ -1,16 +1,21 @@
 import fs from "fs";
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 import mysql, { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import path from "path";
 import {
+  CurrentProjectUser,
   ManagedProject,
   ManagedTask,
   PROJECT_HEALTH_STATUSES,
   PROJECT_STATUSES,
+  PROJECT_USER_ROLES,
   PROJECT_TYPES,
+  ProjectAccess,
   ProjectDocFile,
   ProjectDocFolder,
   ProjectTrackingField,
+  ProjectTeamUser,
   ProjectUpdate,
   ProjectsData,
   TASK_PRIORITIES,
@@ -84,7 +89,53 @@ const DEFAULT_PROJECTS: ManagedProject[] = [
   },
 ];
 
+const DEFAULT_TEAM_USERS: ProjectTeamUser[] = [
+  {
+    id: "user-walid",
+    name: "Walid",
+    email: "walkhatib39@gmail.com",
+    role: "super_admin",
+    isActive: true,
+  },
+  {
+    id: "user-fares-bouzoumita",
+    name: "Fares Bouzoumita",
+    email: "bouzoumita.fares@gmail.com",
+    role: "member",
+    isActive: true,
+  },
+  {
+    id: "user-houcem-bouaffoura",
+    name: "Houcem Bouaffoura",
+    email: "bouaffoura.houssem@gmail.com",
+    role: "member",
+    isActive: true,
+  },
+  {
+    id: "user-hamza-bennour",
+    name: "Hamza Bennour",
+    email: "hamza.bennour@live.com",
+    role: "member",
+    isActive: true,
+  },
+  {
+    id: "user-mohamed-jedoui",
+    name: "Mohamed Jedoui",
+    email: "mohamed.jedoui@gmail.com",
+    role: "member",
+    isActive: true,
+  },
+  {
+    id: "user-hamdi-mannai",
+    name: "Hamdi Mannai",
+    email: "mh.develite@gmail.com",
+    role: "member",
+    isActive: true,
+  },
+];
+
 const DEFAULT_DB_NAME = "techsolution";
+const DEV_PASSWORD = "techsolution";
 
 let poolPromise: Promise<Pool> | null = null;
 let schemaReadyPromise: Promise<void> | null = null;
@@ -144,6 +195,10 @@ async function getPool() {
 
 function createId(prefix: string) {
   return `${prefix}-${randomUUID()}`;
+}
+
+function getInitialProjectsPassword() {
+  return process.env.PROJECTS_PASSWORD?.trim() || DEV_PASSWORD;
 }
 
 function toNullableDate(value: string) {
@@ -396,6 +451,56 @@ function normalizeProjectUpdate(
   };
 }
 
+function normalizeTeamUser(user: Partial<ProjectTeamUser>): ProjectTeamUser | null {
+  if (
+    !user ||
+    typeof user.name !== "string" ||
+    !user.name.trim() ||
+    typeof user.email !== "string" ||
+    !user.email.trim()
+  ) {
+    return null;
+  }
+
+  const role = PROJECT_USER_ROLES.includes(user.role ?? "member")
+    ? user.role ?? "member"
+    : "member";
+
+  return {
+    id:
+      typeof user.id === "string" && user.id.trim()
+        ? user.id.trim()
+        : createId("user"),
+    name: user.name.trim(),
+    email: user.email.trim().toLowerCase(),
+    role,
+    isActive: user.isActive !== false,
+    password:
+      typeof user.password === "string" && user.password.trim()
+        ? user.password
+        : undefined,
+  };
+}
+
+function normalizeProjectAccess(
+  access: Partial<ProjectAccess>
+): ProjectAccess | null {
+  if (
+    !access ||
+    typeof access.userId !== "string" ||
+    !access.userId.trim() ||
+    typeof access.projectId !== "string" ||
+    !access.projectId.trim()
+  ) {
+    return null;
+  }
+
+  return {
+    userId: access.userId.trim(),
+    projectId: access.projectId.trim(),
+  };
+}
+
 function getDefaultTrackingFields(project: ManagedProject): ProjectTrackingField[] {
   const now = Date.now();
   const templates: Record<string, Array<[string, string]>> = {
@@ -521,6 +626,28 @@ function normalizeProjectsData(input: Partial<ProjectsData>): ProjectsData {
           Boolean(update && projectIds.has(update.projectId))
         )
     : [];
+  const teamUsers = Array.isArray(input.teamUsers)
+    ? input.teamUsers
+        .map((user) => normalizeTeamUser(user))
+        .filter((user): user is ProjectTeamUser => Boolean(user))
+    : [];
+  const userIds = new Set(teamUsers.map((user) => user.id));
+  const seenAccess = new Set<string>();
+  const projectAccess = Array.isArray(input.projectAccess)
+    ? input.projectAccess
+        .map((access) => normalizeProjectAccess(access))
+        .filter((access): access is ProjectAccess => {
+          if (!access || !projectIds.has(access.projectId) || !userIds.has(access.userId)) {
+            return false;
+          }
+          const key = `${access.userId}:${access.projectId}`;
+          if (seenAccess.has(key)) {
+            return false;
+          }
+          seenAccess.add(key);
+          return true;
+        })
+    : [];
 
   return {
     projects,
@@ -530,6 +657,8 @@ function normalizeProjectsData(input: Partial<ProjectsData>): ProjectsData {
     docFiles,
     trackingFields,
     updates,
+    teamUsers,
+    projectAccess,
     updatedAt:
       typeof input.updatedAt === "string" && input.updatedAt
         ? input.updatedAt
@@ -553,6 +682,8 @@ function readLegacySeed(): ProjectsData {
     docFiles: [],
     trackingFields: [],
     updates: [],
+    teamUsers: DEFAULT_TEAM_USERS,
+    projectAccess: [],
   });
 }
 
@@ -563,6 +694,20 @@ async function ensureProjectsSchema() {
 
   schemaReadyPromise = (async () => {
     const pool = await getPool();
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_users (
+        id VARCHAR(120) NOT NULL PRIMARY KEY,
+        name VARCHAR(190) NOT NULL,
+        email VARCHAR(190) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(40) NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_project_users_email (email)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS projects (
@@ -703,6 +848,22 @@ async function ensureProjectsSchema() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_access (
+        user_id VARCHAR(120) NOT NULL,
+        project_id VARCHAR(120) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, project_id),
+        INDEX idx_project_access_project (project_id),
+        CONSTRAINT fk_project_access_user
+          FOREIGN KEY (user_id) REFERENCES project_users(id)
+          ON DELETE CASCADE,
+        CONSTRAINT fk_project_access_project
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     const [rows] = await pool.query<RowDataPacket[]>(
       "SELECT COUNT(*) AS count FROM projects"
     );
@@ -714,6 +875,30 @@ async function ensureProjectsSchema() {
           ? seedData.trackingFields
           : seedData.projects.flatMap(getDefaultTrackingFields);
       await saveProjectsDataWithoutSchema(seedData, pool);
+    }
+
+    const [userRows] = await pool.query<RowDataPacket[]>(
+      "SELECT COUNT(*) AS count FROM project_users"
+    );
+
+    if (Number(userRows[0]?.count ?? 0) === 0) {
+      const passwordHash = await bcrypt.hash(getInitialProjectsPassword(), 12);
+
+      for (const user of DEFAULT_TEAM_USERS) {
+        await pool.execute(
+          `INSERT INTO project_users
+            (id, name, email, password_hash, role, is_active)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            user.id,
+            user.name,
+            user.email,
+            passwordHash,
+            user.role,
+            user.isActive ? 1 : 0,
+          ]
+        );
+      }
     }
   })();
 
@@ -746,13 +931,22 @@ async function saveProjectsDataWithoutSchema(
   const data = normalizeProjectsData({
     docFiles: [],
     docFolders: [],
+    projectAccess: [],
     taskSections: [],
+    teamUsers: [],
     trackingFields: [],
     updates: [],
     ...input,
     updatedAt: new Date().toISOString(),
   });
+  const [existingUserRows] = await queryable.query<RowDataPacket[]>(
+    "SELECT id, password_hash AS passwordHash FROM project_users"
+  );
+  const existingPasswordHashes = new Map(
+    existingUserRows.map((row) => [String(row.id), String(row.passwordHash)])
+  );
 
+  await queryable.query("DELETE FROM project_access");
   await queryable.query("DELETE FROM project_updates");
   await queryable.query("DELETE FROM project_tracking_fields");
   await queryable.query("DELETE FROM project_doc_files");
@@ -760,6 +954,28 @@ async function saveProjectsDataWithoutSchema(
   await queryable.query("DELETE FROM tasks");
   await queryable.query("DELETE FROM task_sections");
   await queryable.query("DELETE FROM projects");
+  await queryable.query("DELETE FROM project_users");
+
+  for (const user of data.teamUsers) {
+    const passwordHash = user.password
+      ? await bcrypt.hash(user.password, 12)
+      : existingPasswordHashes.get(user.id) ??
+        (await bcrypt.hash(getInitialProjectsPassword(), 12));
+
+    await queryable.execute(
+      `INSERT INTO project_users
+        (id, name, email, password_hash, role, is_active)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        user.id,
+        user.name,
+        user.email,
+        passwordHash,
+        user.role,
+        user.isActive ? 1 : 0,
+      ]
+    );
+  }
 
   for (const project of data.projects) {
     await queryable.execute(
@@ -871,6 +1087,14 @@ async function saveProjectsDataWithoutSchema(
     );
   }
 
+  for (const access of data.projectAccess) {
+    await queryable.execute(
+      `INSERT IGNORE INTO project_access (user_id, project_id)
+       VALUES (?, ?)`,
+      [access.userId, access.projectId]
+    );
+  }
+
   return data;
 }
 
@@ -953,6 +1177,21 @@ export async function getProjectsData(): Promise<ProjectsData> {
      FROM project_updates
      ORDER BY update_date DESC, created_at DESC`
   );
+  const [userRows] = await pool.query<RowDataPacket[]>(
+    `SELECT
+      id,
+      name,
+      email,
+      role,
+      is_active AS isActive
+     FROM project_users
+     ORDER BY role ASC, name ASC`
+  );
+  const [accessRows] = await pool.query<RowDataPacket[]>(
+    `SELECT user_id AS userId, project_id AS projectId
+     FROM project_access
+     ORDER BY created_at ASC`
+  );
 
   const data = normalizeProjectsData({
     projects: projectRows.map((row) => ({
@@ -1021,10 +1260,148 @@ export async function getProjectsData(): Promise<ProjectsData> {
       title: String(row.title),
       note: String(row.note ?? ""),
     })),
+    teamUsers: userRows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      email: String(row.email),
+      role: row.role,
+      isActive: Boolean(row.isActive),
+    })),
+    projectAccess: accessRows.map((row) => ({
+      userId: String(row.userId),
+      projectId: String(row.projectId),
+    })),
     updatedAt: new Date().toISOString(),
   });
 
   return data;
+}
+
+function toCurrentProjectUser(row: RowDataPacket): CurrentProjectUser {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    email: String(row.email),
+    role: PROJECT_USER_ROLES.includes(row.role) ? row.role : "member",
+    isActive: Boolean(row.isActive),
+  };
+}
+
+export async function authenticateProjectsUser(
+  email: string,
+  password: string
+): Promise<CurrentProjectUser | null> {
+  await ensureProjectsSchema();
+
+  if (!email.trim() || !password) {
+    return null;
+  }
+
+  const pool = await getPool();
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT
+      id,
+      name,
+      email,
+      password_hash AS passwordHash,
+      role,
+      is_active AS isActive
+     FROM project_users
+     WHERE email = ?
+     LIMIT 1`,
+    [email.trim().toLowerCase()]
+  );
+
+  const row = rows[0];
+
+  if (!row || !Boolean(row.isActive)) {
+    return null;
+  }
+
+  const isValidPassword = await bcrypt.compare(
+    password,
+    String(row.passwordHash)
+  );
+
+  return isValidPassword ? toCurrentProjectUser(row) : null;
+}
+
+export async function getProjectUserById(
+  userId: string
+): Promise<CurrentProjectUser | null> {
+  await ensureProjectsSchema();
+  const pool = await getPool();
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT
+      id,
+      name,
+      email,
+      role,
+      is_active AS isActive
+     FROM project_users
+     WHERE id = ?
+     LIMIT 1`,
+    [userId]
+  );
+  const row = rows[0];
+
+  if (!row || !Boolean(row.isActive)) {
+    return null;
+  }
+
+  return toCurrentProjectUser(row);
+}
+
+async function getAccessibleProjectIds(user: CurrentProjectUser): Promise<Set<string>> {
+  if (user.role === "super_admin") {
+    return new Set((await getProjectsData()).projects.map((project) => project.id));
+  }
+
+  const pool = await getPool();
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    "SELECT project_id AS projectId FROM project_access WHERE user_id = ?",
+    [user.id]
+  );
+
+  return new Set(rows.map((row) => String(row.projectId)));
+}
+
+function filterProjectsDataForUser(
+  data: ProjectsData,
+  allowedProjectIds: Set<string>,
+  includeTeam: boolean
+): ProjectsData {
+  return {
+    ...data,
+    projects: data.projects.filter((project) => allowedProjectIds.has(project.id)),
+    taskSections: data.taskSections.filter((section) =>
+      allowedProjectIds.has(section.projectId)
+    ),
+    tasks: data.tasks.filter((task) => allowedProjectIds.has(task.projectId)),
+    docFolders: data.docFolders.filter((folder) =>
+      allowedProjectIds.has(folder.projectId)
+    ),
+    docFiles: data.docFiles.filter((file) => allowedProjectIds.has(file.projectId)),
+    trackingFields: data.trackingFields.filter((field) =>
+      allowedProjectIds.has(field.projectId)
+    ),
+    updates: data.updates.filter((update) => allowedProjectIds.has(update.projectId)),
+    teamUsers: includeTeam ? data.teamUsers : [],
+    projectAccess: includeTeam ? data.projectAccess : [],
+  };
+}
+
+export async function getProjectsDataForUser(
+  user: CurrentProjectUser
+): Promise<ProjectsData> {
+  const data = await getProjectsData();
+
+  if (user.role === "super_admin") {
+    return data;
+  }
+
+  const allowedProjectIds = await getAccessibleProjectIds(user);
+  return filterProjectsDataForUser(data, allowedProjectIds, false);
 }
 
 export async function saveProjectsData(
@@ -1037,4 +1414,80 @@ export async function saveProjectsData(
   );
 
   return getProjectsData();
+}
+
+function replaceProjectScopedItems<T extends { projectId: string }>(
+  currentItems: T[],
+  incomingItems: T[],
+  allowedProjectIds: Set<string>
+) {
+  return [
+    ...currentItems.filter((item) => !allowedProjectIds.has(item.projectId)),
+    ...incomingItems.filter((item) => allowedProjectIds.has(item.projectId)),
+  ];
+}
+
+export async function saveProjectsDataForUser(
+  input: Partial<ProjectsData>,
+  user: CurrentProjectUser
+): Promise<ProjectsData> {
+  if (user.role === "super_admin") {
+    return saveProjectsData(input);
+  }
+
+  const currentData = await getProjectsData();
+  const allowedProjectIds = await getAccessibleProjectIds(user);
+  const incomingData = normalizeProjectsData({
+    ...input,
+    teamUsers: currentData.teamUsers,
+    projectAccess: currentData.projectAccess,
+  });
+
+  const incomingProjectsById = new Map(
+    incomingData.projects.map((project) => [project.id, project])
+  );
+  const mergedData: ProjectsData = {
+    ...currentData,
+    projects: currentData.projects.map((project) =>
+      allowedProjectIds.has(project.id) && incomingProjectsById.has(project.id)
+        ? incomingProjectsById.get(project.id) ?? project
+        : project
+    ),
+    taskSections: replaceProjectScopedItems(
+      currentData.taskSections,
+      incomingData.taskSections,
+      allowedProjectIds
+    ),
+    tasks: replaceProjectScopedItems(
+      currentData.tasks,
+      incomingData.tasks,
+      allowedProjectIds
+    ),
+    docFolders: replaceProjectScopedItems(
+      currentData.docFolders,
+      incomingData.docFolders,
+      allowedProjectIds
+    ),
+    docFiles: replaceProjectScopedItems(
+      currentData.docFiles,
+      incomingData.docFiles,
+      allowedProjectIds
+    ),
+    trackingFields: replaceProjectScopedItems(
+      currentData.trackingFields,
+      incomingData.trackingFields,
+      allowedProjectIds
+    ),
+    updates: replaceProjectScopedItems(
+      currentData.updates,
+      incomingData.updates,
+      allowedProjectIds
+    ),
+    teamUsers: currentData.teamUsers,
+    projectAccess: currentData.projectAccess,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const savedData = await saveProjectsData(mergedData);
+  return filterProjectsDataForUser(savedData, allowedProjectIds, false);
 }

@@ -1,5 +1,7 @@
 import crypto from "crypto";
 import { cookies } from "next/headers";
+import type { CurrentProjectUser } from "@/lib/projectsTypes";
+import { getProjectUserById } from "@/lib/projectsStore";
 
 export const PROJECTS_AUTH_COOKIE = "ts-projects-auth";
 export const PROJECTS_SESSION_SECONDS = 60 * 60 * 24 * 7;
@@ -55,7 +57,7 @@ function safeEqual(value: string, expected: string): boolean {
   return crypto.timingSafeEqual(valueBuffer, expectedBuffer);
 }
 
-export function createProjectsAuthToken(): string {
+export function createProjectsAuthToken(userId: string): string {
   const secret = getSigningSecret();
 
   if (!secret) {
@@ -63,36 +65,38 @@ export function createProjectsAuthToken(): string {
   }
 
   const issuedAt = Date.now().toString();
-  return `${issuedAt}.${createSignature(issuedAt, secret)}`;
+  const payload = `${userId}.${issuedAt}`;
+  return `${payload}.${createSignature(payload, secret)}`;
 }
 
-export function verifyProjectsAuthToken(token?: string | null): boolean {
+export function verifyProjectsAuthToken(token?: string | null): string | null {
   const secret = getSigningSecret();
 
   if (!token || !secret) {
-    return false;
+    return null;
   }
 
-  const [issuedAt, signature] = token.split(".");
+  const [userId, issuedAt, signature] = token.split(".");
 
-  if (!issuedAt || !signature) {
-    return false;
+  if (!userId || !issuedAt || !signature) {
+    return null;
   }
 
   const issuedAtNumber = Number(issuedAt);
 
   if (!Number.isFinite(issuedAtNumber) || issuedAtNumber > Date.now()) {
-    return false;
+    return null;
   }
 
   const isExpired =
     Date.now() - issuedAtNumber > PROJECTS_SESSION_SECONDS * 1000;
 
   if (isExpired) {
-    return false;
+    return null;
   }
 
-  return safeEqual(signature, createSignature(issuedAt, secret));
+  const payload = `${userId}.${issuedAt}`;
+  return safeEqual(signature, createSignature(payload, secret)) ? userId : null;
 }
 
 export function verifyProjectsPassword(input: string): boolean {
@@ -108,17 +112,27 @@ export function verifyProjectsPassword(input: string): boolean {
   return crypto.timingSafeEqual(inputHash, passwordHash);
 }
 
-export async function isProjectsAuthenticated(): Promise<boolean> {
+export async function getProjectsSession(): Promise<CurrentProjectUser | null> {
   const cookieStore = await cookies();
-  return verifyProjectsAuthToken(cookieStore.get(PROJECTS_AUTH_COOKIE)?.value);
+  const userId = verifyProjectsAuthToken(
+    cookieStore.get(PROJECTS_AUTH_COOKIE)?.value
+  );
+
+  return userId ? getProjectUserById(userId) : null;
 }
 
-export async function requireProjectsAuth(): Promise<void> {
-  const isAuthenticated = await isProjectsAuthenticated();
+export async function isProjectsAuthenticated(): Promise<boolean> {
+  return Boolean(await getProjectsSession());
+}
 
-  if (!isAuthenticated) {
+export async function requireProjectsAuth(): Promise<CurrentProjectUser> {
+  const user = await getProjectsSession();
+
+  if (!user) {
     throw new Error(AUTH_ERROR);
   }
+
+  return user;
 }
 
 export function isProjectsAuthError(error: unknown): boolean {

@@ -3,12 +3,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   createProjectsAuthToken,
+  getProjectsSession,
   getProjectsPasswordState,
   PROJECTS_AUTH_COOKIE,
   PROJECTS_SESSION_SECONDS,
-  verifyProjectsAuthToken,
-  verifyProjectsPassword,
 } from "@/lib/projectsAuth";
+import { authenticateProjectsUser } from "@/lib/projectsStore";
 import ProjectsLogin, { ProjectLoginState } from "./ProjectsLogin";
 import ProjectsManager from "./ProjectsManager";
 
@@ -23,19 +23,27 @@ async function loginProjects(
 ): Promise<ProjectLoginState> {
   "use server";
 
+  const email = formData.get("email");
   const password = formData.get("password");
+  const emailValue = typeof email === "string" ? email : "";
   const passwordValue = typeof password === "string" ? password : "";
+
+  if (!emailValue.trim()) {
+    return { error: "Saisis ton email." };
+  }
 
   if (!passwordValue.trim()) {
     return { error: "Saisis le mot de passe." };
   }
 
-  if (!verifyProjectsPassword(passwordValue)) {
-    return { error: "Mot de passe incorrect." };
+  const user = await authenticateProjectsUser(emailValue, passwordValue);
+
+  if (!user) {
+    return { error: "Email ou mot de passe incorrect." };
   }
 
   const cookieStore = await cookies();
-  cookieStore.set(PROJECTS_AUTH_COOKIE, createProjectsAuthToken(), {
+  cookieStore.set(PROJECTS_AUTH_COOKIE, createProjectsAuthToken(user.id), {
     httpOnly: true,
     maxAge: PROJECTS_SESSION_SECONDS,
     path: "/",
@@ -62,12 +70,9 @@ async function logoutProjects() {
 }
 
 export default async function ProjectsPage() {
-  const cookieStore = await cookies();
-  const isAuthenticated = verifyProjectsAuthToken(
-    cookieStore.get(PROJECTS_AUTH_COOKIE)?.value
-  );
+  const currentUser = await getProjectsSession();
 
-  if (!isAuthenticated) {
+  if (!currentUser) {
     return (
       <ProjectsLogin
         loginAction={loginProjects}
@@ -76,5 +81,5 @@ export default async function ProjectsPage() {
     );
   }
 
-  return <ProjectsManager logoutAction={logoutProjects} />;
+  return <ProjectsManager currentUser={currentUser} logoutAction={logoutProjects} />;
 }

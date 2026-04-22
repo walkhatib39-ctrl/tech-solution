@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertCircle, Lock, ShieldCheck } from "lucide-react";
+import { AlertCircle, Lock, Mail, ShieldCheck } from "lucide-react";
 
 export interface ProjectLoginState {
   error?: string;
@@ -102,6 +102,23 @@ export default function ProjectsLogin({
 
             {/* Form */}
             <form action={formAction} className="space-y-4">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-white/40">
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
+                  <input
+                    autoComplete="email"
+                    className="h-12 w-full rounded-xl border border-white/[0.10] bg-white/[0.06] pl-10 pr-4 text-sm text-white placeholder-white/20 outline-none transition focus:border-[#d9140e]/60 focus:bg-white/[0.09] focus:ring-2 focus:ring-[#d9140e]/20"
+                    disabled={isPasswordMissing || isPending}
+                    name="email"
+                    placeholder="nom@domaine.com"
+                    type="email"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-widest text-white/40">
                   Mot de passe
