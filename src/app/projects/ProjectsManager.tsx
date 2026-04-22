@@ -936,7 +936,41 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
     );
   }
   return (
-    <div className="overflow-x-auto">
+    <>
+    <div className="divide-y divide-slate-100 md:hidden">
+      {groups.map((group) => {
+        const groupKey = group.id ?? "unclassified";
+        const isOpen = openSectionIds.has(groupKey);
+
+        return (
+          <div key={groupKey}>
+            <MobileSectionHeader
+              color={group.color}
+              count={group.tasks.length}
+              isOpen={isOpen}
+              name={group.name}
+              onDelete={group.id ? () => onDeleteSection(group.id as string) : undefined}
+              onToggle={() => toggleSection(groupKey)}
+            />
+            {isOpen && (
+              <div className="space-y-2 bg-slate-50/70 px-2 py-2.5">
+                {group.tasks.map((task) => (
+                  <MobileTaskCard
+                    key={task.id}
+                    onChangeStatus={onChangeStatus}
+                    onDeleteTask={onDeleteTask}
+                    onEditTask={onEditTask}
+                    task={task}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+
+    <div className="hidden overflow-x-auto md:block">
     <div className="min-w-[980px] divide-y divide-slate-100">
       {/* Table header */}
       <div className="grid grid-cols-[2fr_140px_100px_130px_120px_120px_1fr_80px] gap-0 bg-slate-50/80 px-6 py-2.5">
@@ -1042,6 +1076,123 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
         );
       })}
     </div>
+    </div>
+    </>
+  );
+}
+
+function MobileSectionHeader({ color, count, isOpen, name, onDelete, onToggle }: {
+  color: string;
+  count: number;
+  isOpen: boolean;
+  name: string;
+  onDelete?: () => void;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between gap-2 px-2.5 py-3"
+      style={{ background: `linear-gradient(90deg, ${color}14 0%, ${color}08 52%, transparent 100%)` }}
+    >
+      <button
+        aria-expanded={isOpen}
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        onClick={onToggle}
+        type="button"
+      >
+        <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: color }} />
+        <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{name}</span>
+        <span className="shrink-0 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-slate-500 shadow-sm ring-1 ring-slate-200/70">
+          {count}
+        </span>
+      </button>
+      {onDelete && (
+        <button
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+          onClick={onDelete}
+          title="Supprimer la section"
+          type="button"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function MobileTaskCard({ onChangeStatus, onDeleteTask, onEditTask, task }: {
+  onChangeStatus: (id: string, s: TaskStatus) => void;
+  onDeleteTask: (id: string) => void;
+  onEditTask: (t: ManagedTask) => void;
+  task: ManagedTask;
+}) {
+  const isDone = task.status === "Terminé";
+  const sm = STATUS_META[task.status];
+
+  return (
+    <article className={`rounded-2xl border border-slate-200 bg-white p-3 shadow-sm ${isDone ? "opacity-60" : ""}`}>
+      <div className="flex items-start gap-2.5">
+        <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${sm.dot}`} />
+        <div className="min-w-0 flex-1">
+          <button
+            className={`block w-full text-left text-sm font-semibold leading-snug text-slate-900 ${isDone ? "line-through decoration-slate-400 decoration-2" : ""}`}
+            onClick={() => onEditTask(task)}
+            type="button"
+          >
+            {task.title}
+          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <select
+              className={`h-7 rounded-full border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none ${sm.badge}`}
+              onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
+              value={task.status}
+            >
+              {TASK_STATUSES.map((s) => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
+            </select>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${PRIORITY_META[task.priority].cls}`}>{task.priority}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button onClick={() => onEditTask(task)} type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-slate-600" title="Modifier">
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={() => onDeleteTask(task.id)} type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500" title="Supprimer">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <MobileTaskMeta icon={<User className="h-3 w-3" />} label="Responsable" value={task.responsible || "—"} />
+        <MobileTaskMeta icon={<Calendar className="h-3 w-3" />} label="Début" value={task.startDate || "—"} />
+        <MobileTaskMeta
+          className="col-span-2"
+          danger={Boolean(task.dueDate && isOverdue(task))}
+          icon={<Calendar className="h-3 w-3" />}
+          label="Limite"
+          value={task.dueDate || "—"}
+        />
+      </div>
+
+      {task.note ? (
+        <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2">
+          <p className={`text-xs font-semibold uppercase tracking-widest text-slate-400 ${isDone ? "line-through" : ""}`}>Note</p>
+          <p className={`mt-1 line-clamp-3 text-xs leading-relaxed text-slate-600 ${isDone ? "line-through text-slate-400" : ""}`}>{task.note}</p>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function MobileTaskMeta({ className = "", danger, icon, label, value }: { className?: string; danger?: boolean; icon?: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className={`min-w-0 rounded-xl bg-slate-50 px-2.5 py-2 ${danger ? "bg-red-50 text-red-600" : ""} ${className}`}>
+      <p className={`text-[10px] font-semibold uppercase tracking-widest ${danger ? "text-red-400" : "text-slate-400"}`}>{label}</p>
+      <p className={`mt-1 flex min-w-0 items-center gap-1.5 font-medium ${danger ? "text-red-600" : "text-slate-600"}`}>
+        {icon ? <span className="shrink-0 text-slate-300">{icon}</span> : null}
+        <span className="truncate">{value}</span>
+      </p>
     </div>
   );
 }
