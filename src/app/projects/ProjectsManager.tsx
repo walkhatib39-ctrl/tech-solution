@@ -23,6 +23,7 @@ import {
   Loader2,
   LogOut,
   Mail,
+  Menu,
   Pencil,
   Plus,
   Save,
@@ -168,6 +169,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [currentUser, setCurrentUser] = useState<CurrentProjectUser>(initialUser);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("project");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectTab>("Pilotage");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("Tous");
   const [responsibleFilter, setResponsibleFilter] = useState<ResponsibleFilter>("Tous");
@@ -240,6 +242,17 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       setWorkspaceView("project");
     }
   }, [isSuperAdmin, workspaceView]);
+
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsSidebarOpen(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSidebarOpen]);
 
   const selectedProject  = useMemo(() => data.projects.find((p) => p.id === selectedProjectId) ?? data.projects[0], [data.projects, selectedProjectId]);
   const projectTasks     = useMemo(() => !selectedProject ? [] : data.tasks.filter((t) => t.projectId === selectedProject.id), [data.tasks, selectedProject]);
@@ -319,6 +332,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     updateData((c) => ({ ...c, projects: [...c.projects, proj], trackingFields: [...c.trackingFields, ...buildTrackingTemplate(proj)] }));
     setSelectedProjectId(proj.id);
     setWorkspaceView("project");
+    setIsSidebarOpen(false);
     setProjectForm({ name: "", type: "DEV", color: "#1e3a5f", status: "Actif" });
     setShowAddProject(false);
   };
@@ -423,10 +437,21 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div dir="ltr" className="flex h-screen overflow-hidden bg-[#f0f2f5] font-sans text-slate-900 antialiased">
+    <div dir="ltr" className="flex h-dvh overflow-hidden bg-[#f0f2f5] font-sans text-slate-900 antialiased">
+
+      {isSidebarOpen && (
+        <button
+          aria-label="Fermer le menu"
+          className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          type="button"
+        />
+      )}
 
       {/* ══ SIDEBAR ══════════════════════════════════════════════════════════ */}
-      <aside className="flex w-[248px] shrink-0 flex-col bg-[#0d1b2a] overflow-hidden">
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[86vw] shrink-0 flex-col overflow-hidden bg-[#0d1b2a] shadow-2xl shadow-slate-950/40 transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[248px] lg:max-w-none lg:translate-x-0 lg:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
         {/* Brand */}
         <div className="flex items-center gap-3 px-5 py-[18px] border-b border-white/[0.06]">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#d9140e] shadow-lg shadow-red-900/40">
@@ -436,6 +461,14 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
             <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Tech-Solution</div>
             <div className="text-[13px] font-bold text-white">Projects</div>
           </div>
+          <button
+            aria-label="Fermer le menu"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-white/35 transition hover:bg-white/[0.06] hover:text-white/70 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+            type="button"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Projects list */}
@@ -447,7 +480,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
             {data.projects.map((project) => {
               const isActive = workspaceView === "project" && selectedProject?.id === project.id;
               return (
-                <button key={project.id} onClick={() => { setSelectedProjectId(project.id); setWorkspaceView("project"); }} type="button"
+                <button key={project.id} onClick={() => { setSelectedProjectId(project.id); setWorkspaceView("project"); setIsSidebarOpen(false); }} type="button"
                   className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all ${isActive ? "bg-white/[0.10] text-white" : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"}`}
                 >
                   <span className="h-2 w-2 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: project.color }} />
@@ -468,7 +501,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         {isSuperAdmin && (
           <div className="border-t border-white/[0.06] px-3 py-3">
             <button
-              onClick={() => setWorkspaceView("team")}
+              onClick={() => { setWorkspaceView("team"); setIsSidebarOpen(false); }}
               type="button"
               className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition ${workspaceView === "team" ? "bg-white/[0.10] text-white" : "text-white/45 hover:bg-white/[0.05] hover:text-white/75"}`}
             >
@@ -534,8 +567,16 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         {/* Top bar */}
-        <header className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-slate-200/80 bg-white px-6 shadow-sm shadow-slate-200/40">
-          <div className="flex items-center gap-2 text-sm min-w-0">
+        <header className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-3 shadow-sm shadow-slate-200/40 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 text-sm">
+            <button
+              aria-label="Ouvrir le menu"
+              className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-800 lg:hidden"
+              onClick={() => setIsSidebarOpen(true)}
+              type="button"
+            >
+              <Menu className="h-4 w-4" />
+            </button>
             {workspaceView === "team" ? (
               <>
                 <Users className="h-4 w-4 shrink-0 text-slate-400" />
@@ -554,7 +595,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-auto p-5">
+        <main className="flex-1 overflow-auto p-3 sm:p-5">
           {isLoading ? (
             <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-3 text-sm text-slate-400">
@@ -580,7 +621,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                       <p className="mt-1 text-sm text-slate-400">Gérer les membres et les projets visibles par chacun.</p>
                     </div>
                   </div>
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
                     <StatPill label="Membres" value={data.teamUsers.length} color="slate" icon={<Users className="h-3.5 w-3.5" />} />
                     <StatPill label="Actifs" value={data.teamUsers.filter((user) => user.isActive).length} color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
                     <StatPill label="Projets" value={data.projects.length} color="amber" icon={<FolderKanban className="h-3.5 w-3.5" />} />
@@ -615,7 +656,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     </div>
                   </div>
                   {/* Stats row */}
-                  <div className="flex gap-3">
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
                     <StatPill label="Total"     value={stats.total}   color="slate"   icon={<Columns3    className="h-3.5 w-3.5" />} />
                     <StatPill label="Terminées" value={stats.done}    color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
                     <StatPill label="Bloquées"  value={stats.blocked} color="red"     icon={<AlertCircle className="h-3.5 w-3.5" />} />
@@ -624,8 +665,8 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 </div>
 
                 {/* Tab bar */}
-                <div className="mt-5 flex items-end justify-between">
-                  <nav className="flex">
+                <div className="mt-5 flex items-end justify-between gap-3">
+                  <nav className="flex min-w-0 overflow-x-auto">
                     {PROJECT_TABS.map(({ label, icon: Icon }) => {
                       const active = activeTab === label;
                       return (
@@ -886,7 +927,8 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
     );
   }
   return (
-    <div className="divide-y divide-slate-100">
+    <div className="overflow-x-auto">
+    <div className="min-w-[980px] divide-y divide-slate-100">
       {/* Table header */}
       <div className="grid grid-cols-[2fr_140px_100px_130px_120px_120px_1fr_80px] gap-0 bg-slate-50/80 px-6 py-2.5">
         {["Tâche", "Statut", "Priorité", "Responsable", "Début", "Limite", "Note", ""].map((h) => (
@@ -990,6 +1032,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
         </div>
         );
       })}
+    </div>
     </div>
   );
 }
@@ -1553,6 +1596,8 @@ function TeamTab({ onAddUser, onToggleProjectAccess, onUpdateUser, projectAccess
       </aside>
 
       <section className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+        <div className="min-w-[860px]">
         <div className="grid grid-cols-[260px_1fr_110px] gap-0 border-b border-slate-100 bg-slate-50/80 px-5 py-2.5">
           {["Membre", "Projets visibles", "Statut"].map((h) => (
             <div key={h} className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{h}</div>
@@ -1621,6 +1666,8 @@ function TeamTab({ onAddUser, onToggleProjectAccess, onUpdateUser, projectAccess
               </div>
             );
           })}
+        </div>
+        </div>
         </div>
       </section>
     </div>
