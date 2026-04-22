@@ -595,7 +595,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-auto p-3 sm:p-5">
+        <main className="flex-1 overflow-auto p-1.5 sm:p-5">
           {isLoading ? (
             <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex items-center gap-3 text-sm text-slate-400">
@@ -609,7 +609,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               <button onClick={() => void loadData()} className="rounded-xl bg-[#d9140e] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b91010]">Réessayer</button>
             </div>
           ) : workspaceView === "team" && isSuperAdmin ? (
-            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
+            <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60 sm:rounded-2xl">
               <div className="border-b border-slate-100 px-6 py-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start gap-3">
@@ -638,16 +638,16 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               />
             </div>
           ) : selectedProject ? (
-            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
+            <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60 sm:rounded-2xl">
 
               {/* ── Project header ── */}
-              <div className="border-b border-slate-100 px-6 pt-5 pb-0">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="border-b border-slate-100 px-2.5 pt-4 pb-0 sm:px-6 sm:pt-5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   {/* Title + meta */}
-                  <div className="flex items-start gap-3">
-                    <span className="mt-1.5 h-3 w-3 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: selectedProject.color }} />
-                    <div>
-                      <h1 className="text-xl font-bold text-slate-900">{selectedProject.name}</h1>
+                  <div className="flex items-start gap-2.5 sm:gap-3">
+                    <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full shadow-sm sm:h-3 sm:w-3" style={{ backgroundColor: selectedProject.color }} />
+                    <div className="min-w-0">
+                      <h1 className="truncate text-[22px] font-bold leading-tight text-slate-900 sm:text-xl lg:text-2xl">{selectedProject.name}</h1>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <TypeBadge type={selectedProject.type} />
                         <StatusBadge status={selectedProject.status} />
@@ -656,7 +656,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     </div>
                   </div>
                   {/* Stats row */}
-                  <div className="flex flex-wrap gap-3 lg:justify-end">
+                  <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-3 lg:justify-end">
                     <StatPill label="Total"     value={stats.total}   color="slate"   icon={<Columns3    className="h-3.5 w-3.5" />} />
                     <StatPill label="Terminées" value={stats.done}    color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
                     <StatPill label="Bloquées"  value={stats.blocked} color="red"     icon={<AlertCircle className="h-3.5 w-3.5" />} />
@@ -665,20 +665,29 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 </div>
 
                 {/* Tab bar */}
-                <div className="mt-5 flex items-end justify-between gap-3">
-                  <nav className="flex min-w-0 overflow-x-auto">
+                {activeTab === "Tâches" && (
+                  <div className="mt-3 flex justify-center sm:hidden">
+                    <button onClick={() => { setEditingTask(null); setIsTaskEditorOpen(true); }} type="button"
+                      className="flex h-8 min-w-[116px] items-center justify-center gap-1.5 rounded-full bg-[#d9140e] px-4 text-xs font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]">
+                      <Plus className="h-3.5 w-3.5" /> Nouvelle tâche
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+                  <nav className="grid grid-cols-4 gap-1 rounded-2xl bg-slate-50 p-1 sm:flex sm:min-w-0 sm:overflow-x-auto sm:rounded-none sm:bg-transparent sm:p-0">
                     {PROJECT_TABS.map(({ label, icon: Icon }) => {
                       const active = activeTab === label;
                       return (
                         <button key={label} onClick={() => setActiveTab(label)} type="button"
-                          className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-all ${active ? "border-[#d9140e] text-slate-900" : "border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-200"}`}>
-                          <Icon className="h-3.5 w-3.5" /> {label}
+                          className={`flex min-w-0 shrink-0 items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-[11px] font-semibold transition-all sm:justify-start sm:gap-2 sm:rounded-none sm:border-b-2 sm:px-4 sm:py-3 sm:text-sm ${active ? "bg-white text-slate-900 shadow-sm sm:border-[#d9140e] sm:bg-transparent sm:shadow-none" : "text-slate-400 hover:bg-white/70 hover:text-slate-600 sm:border-transparent sm:hover:border-slate-200 sm:hover:bg-transparent"}`}>
+                          <Icon className="hidden h-3.5 w-3.5 sm:block" /> {label}
                         </button>
                       );
                     })}
                   </nav>
                   {activeTab === "Tâches" && (
-                    <div className="mb-1">
+                    <div className="mb-1 hidden sm:block">
                       <button onClick={() => { setEditingTask(null); setIsTaskEditorOpen(true); }} type="button"
                         className="flex h-8 items-center gap-1.5 rounded-xl bg-[#d9140e] px-3 text-xs font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]">
                         <Plus className="h-3.5 w-3.5" /> Nouvelle tâche
@@ -690,25 +699,25 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
               {/* ── Tab filter bar (Tasks only) ── */}
               {activeTab === "Tâches" && (
-                <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-6 py-3">
-                  <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-1 shadow-sm">
-                    <Filter className="h-3 w-3 text-slate-400" />
+                <div className="space-y-2 border-b border-slate-100 bg-slate-50/60 px-2 py-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:space-y-0 sm:px-6 sm:py-3">
+                  <div className="grid w-full grid-cols-5 items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm sm:flex sm:w-auto sm:px-2">
+                    <Filter className="hidden h-3 w-3 text-slate-400 sm:block" />
                     {(["Tous", ...TASK_STATUSES] as StatusFilter[]).map((s) => (
                       <button key={s} onClick={() => setStatusFilter(s)} type="button"
-                        className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${statusFilter === s ? "bg-[#0d1b2a] text-white" : "text-slate-500 hover:bg-slate-100"}`}>
+                        className={`min-w-0 rounded-lg px-1 py-1 text-[10px] font-medium transition sm:shrink-0 sm:px-2.5 sm:text-xs ${statusFilter === s ? "bg-[#0d1b2a] text-white" : "text-slate-500 hover:bg-slate-100"}`}>
                         {s}
                       </button>
                     ))}
                   </div>
-                  <label className="flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-sm">
+                  <label className="flex h-8 w-full items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-sm sm:w-auto">
                     <User className="h-3 w-3 text-slate-400" />
-                    <select disabled={!responsibleOptions.length} className="bg-transparent text-xs text-slate-600 outline-none" onChange={(e) => setResponsibleFilter(e.target.value)} value={responsibleFilter}>
+                    <select disabled={!responsibleOptions.length} className="min-w-0 flex-1 bg-transparent text-xs text-slate-600 outline-none sm:flex-none" onChange={(e) => setResponsibleFilter(e.target.value)} value={responsibleFilter}>
                       <option value="Tous">Tous les responsables</option>
                       {responsibleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </label>
                   <form
-                    className="ml-auto flex h-8 min-w-[220px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 shadow-sm"
+                    className="flex h-8 w-full items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 shadow-sm sm:ml-auto sm:min-w-[220px] sm:w-auto"
                     onSubmit={(e) => {
                       e.preventDefault();
                       handleAddTaskSection(selectedProject.id, taskSectionName);
@@ -1682,10 +1691,10 @@ function StatPill({ label, value, color, icon }: { label: string; value: number;
   const colors = { slate: "text-slate-400", emerald: "text-emerald-500", red: "text-red-500", amber: "text-amber-500" };
   const numColors = { slate: "text-slate-700", emerald: "text-slate-700", red: value > 0 ? "text-red-600" : "text-slate-300", amber: value > 0 ? "text-amber-600" : "text-slate-300" };
   return (
-    <div className="flex flex-col items-center gap-0.5 rounded-xl border border-slate-100 bg-white px-3.5 py-2.5 shadow-sm shadow-slate-100/60 min-w-[64px]">
+    <div className="flex min-w-0 flex-col items-center gap-0.5 rounded-xl border border-slate-100 bg-white px-1.5 py-2 shadow-sm shadow-slate-100/60 sm:min-w-[64px] sm:px-3.5 sm:py-2.5">
       <span className={`${colors[color]}`}>{icon}</span>
-      <span className={`text-lg font-bold ${numColors[color]}`}>{value}</span>
-      <span className="text-[10px] font-medium text-slate-400">{label}</span>
+      <span className={`text-base font-bold sm:text-lg ${numColors[color]}`}>{value}</span>
+      <span className="max-w-full truncate text-[9px] font-medium text-slate-400 sm:text-[10px]">{label}</span>
     </div>
   );
 }
