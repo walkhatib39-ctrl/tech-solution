@@ -1216,7 +1216,13 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
   const [addFileTarget, setAddFileTarget]   = useState<string | null | "none">("none");
   const [addFolderOpen, setAddFolderOpen]   = useState(false);
   const [searchTerm, setSearchTerm]         = useState("");
-  const [editorMode, setEditorMode]         = useState<"split" | "edit" | "preview">("split");
+  const [editorMode, setEditorMode]         = useState<"split" | "edit" | "preview">("edit");
+  const [mobilePanel, setMobilePanel]       = useState<"browser" | "editor">("browser");
+
+  const handleSelectFile = (id: string) => {
+    onSelectFile(id);
+    setMobilePanel("editor");
+  };
 
   const toggleFolder = (id: string | null) => {
     setExpandedFolders((prev) => {
@@ -1234,12 +1240,13 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
   const selectedFolder = selectedFile
     ? (selectedFile.folderId ? folders.find((f) => f.id === selectedFile.folderId) : null)
     : null;
+  const activeMobilePanel = selectedFile ? mobilePanel : "browser";
 
   return (
-    <div className="flex min-h-[600px] border-t border-slate-100" style={{ height: "calc(100vh - 220px)", minHeight: 560 }}>
+    <div className="border-t border-slate-100 md:flex md:h-[calc(100vh-220px)] md:min-h-[560px]">
 
       {/* ── FILE EXPLORER SIDEBAR ── */}
-      <aside className="flex w-[260px] shrink-0 flex-col border-r border-slate-100 bg-[#f8fafc]">
+      <aside className={`${activeMobilePanel === "browser" ? "flex" : "hidden"} min-h-[520px] flex-col bg-[#f8fafc] md:flex md:w-[260px] md:shrink-0 md:border-r md:border-slate-100`}>
 
         {/* Sidebar header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -1309,7 +1316,7 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                 {allSearched.length} résultat{allSearched.length > 1 ? "s" : ""}
               </div>
               {allSearched.map((file) => (
-                <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={onSelectFile} onDelete={onDeleteFile} />
+                <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={handleSelectFile} onDelete={onDeleteFile} />
               ))}
               {!allSearched.length && <p className="px-3 py-4 text-center text-xs text-slate-400">Aucun résultat.</p>}
             </div>
@@ -1332,7 +1339,7 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                 {expandedFolders.has(null) && (
                   <div className="ml-4 border-l border-slate-200 pl-2">
                     {rootFiles.map((file) => (
-                      <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={onSelectFile} onDelete={onDeleteFile} />
+                      <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={handleSelectFile} onDelete={onDeleteFile} />
                     ))}
                     {/* New file in root */}
                     {addFileTarget === null ? (
@@ -1372,7 +1379,7 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                         <span className="rounded px-1 text-[10px] text-slate-400">{folderFiles.length}</span>
                       </button>
                       {/* Folder actions */}
-                      <div className="flex shrink-0 items-center gap-0 opacity-0 transition group-hover:opacity-100">
+                      <div className="flex shrink-0 items-center gap-0 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                         <button
                           onClick={() => { setAddFileTarget(isTarget ? "none" : folder.id); if (!isExpanded) toggleFolder(folder.id); }}
                           type="button" title="Nouveau fichier"
@@ -1389,7 +1396,7 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                     {isExpanded && (
                       <div className="ml-4 border-l border-slate-200 pl-2">
                         {folderFiles.map((file) => (
-                          <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={onSelectFile} onDelete={onDeleteFile} />
+                          <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={handleSelectFile} onDelete={onDeleteFile} />
                         ))}
                         {/* New file in folder */}
                         {isTarget ? (
@@ -1414,11 +1421,19 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
       </aside>
 
       {/* ── EDITOR ── */}
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
+      <div className={`${activeMobilePanel === "editor" ? "flex" : "hidden"} min-h-[560px] min-w-0 flex-1 flex-col bg-white md:flex md:min-h-0`}>
         {selectedFile ? (
           <>
             {/* Editor top bar */}
-            <div className="flex h-12 shrink-0 items-center gap-3 border-b border-slate-100 bg-[#f8fafc] px-5">
+            <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-slate-100 bg-[#f8fafc] px-3 py-2 md:h-12 md:flex-nowrap md:gap-3 md:px-5 md:py-0">
+              <button
+                onClick={() => setMobilePanel("browser")}
+                type="button"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 md:hidden"
+                title="Retour aux documents"
+              >
+                <ChevronRight className="h-4 w-4 rotate-180" />
+              </button>
               {/* Breadcrumb */}
               <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-slate-400">
                 <BookOpen className="h-3.5 w-3.5 shrink-0" />
@@ -1435,13 +1450,13 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                 />
               </div>
               {/* View toggle */}
-              <div className="flex items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5">
+              <div className="order-3 flex w-full items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5 md:order-none md:w-auto">
                 {(["edit", "split", "preview"] as const).map((mode) => {
                   const labels = { edit: "Édition", split: "Côte à côte", preview: "Aperçu" };
                   const icons  = { edit: <Pencil className="h-3.5 w-3.5" />, split: <Eye className="h-3.5 w-3.5" />, preview: <BookOpen className="h-3.5 w-3.5" /> };
                   return (
                     <button key={mode} onClick={() => setEditorMode(mode)} type="button"
-                      className={`flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition ${editorMode === mode ? "bg-[#0d1b2a] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
+                      className={`flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition md:flex-none ${mode === "split" ? "hidden md:flex" : ""} ${editorMode === mode ? "bg-[#0d1b2a] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
                       {icons[mode]}
                       <span className="hidden sm:inline">{labels[mode]}</span>
                     </button>
@@ -1450,13 +1465,13 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
               </div>
               {/* Delete */}
               <button onClick={() => onDeleteFile(selectedFile.id)} type="button"
-                className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500">
+                className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500 md:px-3">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
 
             {/* Editor body */}
-            <div className={`flex min-h-0 flex-1 ${editorMode === "split" ? "grid grid-cols-2 divide-x divide-slate-100" : ""}`}>
+            <div className={`flex min-h-0 flex-1 flex-col ${editorMode === "split" ? "md:grid md:grid-cols-2 md:divide-x md:divide-slate-100" : ""}`}>
               {/* Textarea */}
               {(editorMode === "edit" || editorMode === "split") && (
                 <div className="flex min-h-0 flex-col">
@@ -1466,7 +1481,7 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                     </div>
                   )}
                   <textarea
-                    className="flex-1 resize-none bg-white p-5 font-mono text-[13px] leading-7 text-slate-700 outline-none placeholder-slate-300"
+                    className="min-h-[420px] flex-1 resize-none bg-white p-4 font-mono text-[13px] leading-7 text-slate-700 outline-none placeholder-slate-300 md:min-h-0 md:p-5"
                     placeholder="Commencez à écrire en Markdown…"
                     onChange={(e) => onUpdateFile(selectedFile.id, { contentMarkdown: e.target.value })}
                     value={selectedFile.contentMarkdown}
@@ -1475,13 +1490,13 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
               )}
               {/* Preview */}
               {(editorMode === "preview" || editorMode === "split") && (
-                <div className="flex min-h-0 flex-col overflow-hidden">
+                <div className={`${editorMode === "split" ? "hidden md:flex" : "flex"} min-h-0 flex-col overflow-hidden`}>
                   {editorMode === "split" && (
                     <div className="border-b border-slate-100 bg-[#f8fafc] px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                       Aperçu
                     </div>
                   )}
-                  <div className="flex-1 overflow-y-auto p-6">
+                  <div className="flex-1 overflow-y-auto p-4 md:p-6">
                     <MarkdownPreview content={selectedFile.contentMarkdown} />
                   </div>
                 </div>
@@ -1516,7 +1531,7 @@ function DocFileRow({ file, selected, onSelect, onDelete }: {
         <span className="truncate">{file.title}</span>
       </button>
       <button onClick={() => onDelete(file.id)} type="button"
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-300 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100">
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-300 opacity-100 transition hover:bg-red-50 hover:text-red-500 md:opacity-0 md:group-hover:opacity-100">
         <Trash2 className="h-3 w-3" />
       </button>
     </div>
