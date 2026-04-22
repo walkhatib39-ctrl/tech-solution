@@ -1905,10 +1905,10 @@ function TaskEditor({ defaultProjectId, onClose, onSave, projects, sections, tas
     : "";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center">
-      <div className="w-full max-w-[580px] rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/5">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-[580px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/5 sm:max-h-[calc(100dvh-2rem)]">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+        <div className="shrink-0 flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
           <div>
             <h2 className="text-lg font-bold text-slate-900">{task ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
             <p className="mt-0.5 text-xs text-slate-400">Sauvegarde automatique après validation.</p>
@@ -1918,7 +1918,7 @@ function TaskEditor({ defaultProjectId, onClose, onSave, projects, sections, tas
           </button>
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); onSave({ ...draft, sectionId: selectedSectionId || null }, task?.id); }} className="grid gap-4 px-6 py-5">
+        <form onSubmit={(e) => { e.preventDefault(); onSave({ ...draft, sectionId: selectedSectionId || null }, task?.id); }} className="grid gap-3 overflow-y-auto px-4 py-4 sm:gap-4 sm:px-6 sm:py-5">
           {/* Title */}
           <div>
             <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Titre</label>
@@ -1962,7 +1962,7 @@ function TaskEditor({ defaultProjectId, onClose, onSave, projects, sections, tas
             <textarea rows={3} className="w-full resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 placeholder-slate-300 outline-none focus:border-[#d9140e]/50 focus:ring-2 focus:ring-[#d9140e]/10" onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Contexte, blocage, prochaine action…" value={draft.note} />
           </div>
 
-          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:m-0 sm:flex-row sm:justify-end sm:border-t-0 sm:bg-transparent sm:p-0">
             <button onClick={onClose} type="button" className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
             <button type="submit" className="h-10 rounded-xl bg-[#d9140e] px-6 text-sm font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]">Enregistrer</button>
           </div>
