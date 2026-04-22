@@ -37,11 +37,11 @@ export default function ProjectsLogin({
             <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#d9140e]">
               <Lock className="h-8 w-8 text-white" />
             </div>
-            <h1 className="mb-2 text-2xl font-bold text-[#39547c]">
+            <h1 className="mb-2 whitespace-nowrap text-2xl font-bold leading-tight text-[#39547c]">
               Connexion projets
             </h1>
-            <p className="text-sm text-gray-600">
-              Accès à la mini-app de gestion de projets
+            <p className="text-gray-600">
+              Espace interne de gestion de projets
             </p>
           </div>
 
@@ -55,12 +55,6 @@ export default function ProjectsLogin({
                 </code>{" "}
                 dans les variables d&apos;environnement.
               </span>
-            </div>
-          )}
-
-          {passwordState.isUsingDevFallback && (
-            <div className="mb-6 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
-              Mode local : mot de passe de développement actif.
             </div>
           )}
 
@@ -80,7 +74,7 @@ export default function ProjectsLogin({
                 <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
                 <input
                   autoComplete="email"
-                  className="w-full rounded-lg border border-gray-300 py-3 pl-10 pr-4 text-sm text-gray-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#d9140e]"
+                  className="w-full rounded-lg border border-gray-300 py-3 pl-10 pr-4 text-gray-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#d9140e]"
                   disabled={isPasswordMissing || isPending}
                   name="email"
                   placeholder="nom@domaine.com"
@@ -97,7 +91,7 @@ export default function ProjectsLogin({
                 <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
                 <input
                   autoComplete="current-password"
-                  className="w-full rounded-lg border border-gray-300 py-3 pl-10 pr-4 text-sm text-gray-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#d9140e]"
+                  className="w-full rounded-lg border border-gray-300 py-3 pl-10 pr-4 text-gray-900 outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#d9140e]"
                   disabled={isPasswordMissing || isPending}
                   name="password"
                   placeholder="••••••••"
@@ -123,7 +117,12 @@ export default function ProjectsLogin({
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-500">
-            Tech-Solution Espace projets © 2026
+            Tech-Solution Projets © 2026
+            {passwordState.isUsingDevFallback && (
+              <div className="mt-1 text-xs text-blue-600">
+                Mode local actif
+              </div>
+            )}
           </div>
         </div>
       </div>
