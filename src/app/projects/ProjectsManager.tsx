@@ -61,7 +61,8 @@ import {
 type SaveState = "idle" | "saving" | "saved" | "error";
 type StatusFilter = TaskStatus | "Tous";
 type ResponsibleFilter = string | "Tous";
-type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Suivi" | "Équipe";
+type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Suivi";
+type WorkspaceView = "project" | "team";
 type ProjectStats = { blocked: number; done: number; overdue: number; progress: number; total: number };
 type TaskSectionGroup = { id: string | null; color: string; name: string; tasks: ManagedTask[] };
 
@@ -107,7 +108,6 @@ const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType }> = [
   { label: "Tâches",   icon: Columns3          },
   { label: "Docs",     icon: BookOpen          },
   { label: "Suivi",    icon: BarChart3         },
-  { label: "Équipe",   icon: Users             },
 ];
 
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
@@ -167,6 +167,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [data, setData] = useState<ProjectsData>(EMPTY_DATA);
   const [currentUser, setCurrentUser] = useState<CurrentProjectUser>(initialUser);
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("project");
   const [activeTab, setActiveTab] = useState<ProjectTab>("Pilotage");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("Tous");
   const [responsibleFilter, setResponsibleFilter] = useState<ResponsibleFilter>("Tous");
@@ -235,10 +236,10 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   }, [data.projects, selectedProjectId]);
 
   useEffect(() => {
-    if (!isSuperAdmin && activeTab === "Équipe") {
-      setActiveTab("Pilotage");
+    if (!isSuperAdmin && workspaceView === "team") {
+      setWorkspaceView("project");
     }
-  }, [activeTab, isSuperAdmin]);
+  }, [isSuperAdmin, workspaceView]);
 
   const selectedProject  = useMemo(() => data.projects.find((p) => p.id === selectedProjectId) ?? data.projects[0], [data.projects, selectedProjectId]);
   const projectTasks     = useMemo(() => !selectedProject ? [] : data.tasks.filter((t) => t.projectId === selectedProject.id), [data.tasks, selectedProject]);
@@ -317,6 +318,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     const proj: ManagedProject = { id: createId("project"), name: projectForm.name.trim(), type: projectForm.type, color: projectForm.color, status: projectForm.status, health: "Bon", progress: 0, nextAction: "", blockers: "", lastUpdate: "" };
     updateData((c) => ({ ...c, projects: [...c.projects, proj], trackingFields: [...c.trackingFields, ...buildTrackingTemplate(proj)] }));
     setSelectedProjectId(proj.id);
+    setWorkspaceView("project");
     setProjectForm({ name: "", type: "DEV", color: "#1e3a5f", status: "Actif" });
     setShowAddProject(false);
   };
@@ -443,9 +445,9 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
           </div>
           <div className="space-y-px">
             {data.projects.map((project) => {
-              const isActive = selectedProject?.id === project.id;
+              const isActive = workspaceView === "project" && selectedProject?.id === project.id;
               return (
-                <button key={project.id} onClick={() => setSelectedProjectId(project.id)} type="button"
+                <button key={project.id} onClick={() => { setSelectedProjectId(project.id); setWorkspaceView("project"); }} type="button"
                   className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all ${isActive ? "bg-white/[0.10] text-white" : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"}`}
                 >
                   <span className="h-2 w-2 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: project.color }} />
@@ -462,6 +464,20 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
             })}
           </div>
         </div>
+
+        {isSuperAdmin && (
+          <div className="border-t border-white/[0.06] px-3 py-3">
+            <button
+              onClick={() => setWorkspaceView("team")}
+              type="button"
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition ${workspaceView === "team" ? "bg-white/[0.10] text-white" : "text-white/45 hover:bg-white/[0.05] hover:text-white/75"}`}
+            >
+              <Users className="h-4 w-4" />
+              <span className="flex-1 text-left font-medium">Équipe</span>
+              <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] text-white/35">{data.teamUsers.length}</span>
+            </button>
+          </div>
+        )}
 
         {isSuperAdmin && (
           <div className="border-t border-white/[0.06] px-3 py-3">
@@ -520,7 +536,14 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         {/* Top bar */}
         <header className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-slate-200/80 bg-white px-6 shadow-sm shadow-slate-200/40">
           <div className="flex items-center gap-2 text-sm min-w-0">
-            {selectedProject && <>
+            {workspaceView === "team" ? (
+              <>
+                <Users className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="truncate font-semibold text-slate-700">Équipe</span>
+                <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                <span className="font-medium text-slate-400">Accès projets</span>
+              </>
+            ) : selectedProject && <>
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: selectedProject.color }} />
               <span className="truncate font-semibold text-slate-700">{selectedProject.name}</span>
               <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
@@ -543,6 +566,35 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               <AlertCircle className="h-8 w-8 text-[#d9140e]" />
               <p className="font-semibold text-red-900">{loadError}</p>
               <button onClick={() => void loadData()} className="rounded-xl bg-[#d9140e] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b91010]">Réessayer</button>
+            </div>
+          ) : workspaceView === "team" && isSuperAdmin ? (
+            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
+              <div className="border-b border-slate-100 px-6 py-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0d1b2a] text-white shadow-sm">
+                      <Users className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h1 className="text-2xl font-bold text-slate-900">Équipe</h1>
+                      <p className="mt-1 text-sm text-slate-400">Gérer les membres et les projets visibles par chacun.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <StatPill label="Membres" value={data.teamUsers.length} color="slate" icon={<Users className="h-3.5 w-3.5" />} />
+                    <StatPill label="Actifs" value={data.teamUsers.filter((user) => user.isActive).length} color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
+                    <StatPill label="Projets" value={data.projects.length} color="amber" icon={<FolderKanban className="h-3.5 w-3.5" />} />
+                  </div>
+                </div>
+              </div>
+              <TeamTab
+                onAddUser={handleAddTeamUser}
+                onToggleProjectAccess={handleToggleProjectAccess}
+                onUpdateUser={handleUpdateTeamUser}
+                projectAccess={data.projectAccess}
+                projects={data.projects}
+                users={data.teamUsers}
+              />
             </div>
           ) : selectedProject ? (
             <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60">
@@ -574,7 +626,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 {/* Tab bar */}
                 <div className="mt-5 flex items-end justify-between">
                   <nav className="flex">
-                    {PROJECT_TABS.filter((tab) => isSuperAdmin || tab.label !== "Équipe").map(({ label, icon: Icon }) => {
+                    {PROJECT_TABS.map(({ label, icon: Icon }) => {
                       const active = activeTab === label;
                       return (
                         <button key={label} onClick={() => setActiveTab(label)} type="button"
@@ -646,16 +698,6 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               {activeTab === "Tâches"   && <TachesTab groups={taskGroups} onChangeStatus={handleChangeTaskStatus} onDeleteSection={handleDeleteTaskSection} onDeleteTask={handleDeleteTask} onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }} />}
               {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
               {activeTab === "Suivi"    && <SuiviTab fields={trackingFields} updates={projectUpdates} project={selectedProject} onAddField={handleAddTracking} onUpdateField={handleUpdateTracking} onDeleteField={handleDeleteTracking} onAddUpdate={handleAddUpdate} onDeleteUpdate={handleDeleteUpdate} />}
-              {activeTab === "Équipe" && isSuperAdmin && (
-                <TeamTab
-                  onAddUser={handleAddTeamUser}
-                  onToggleProjectAccess={handleToggleProjectAccess}
-                  onUpdateUser={handleUpdateTeamUser}
-                  projectAccess={data.projectAccess}
-                  projects={data.projects}
-                  users={data.teamUsers}
-                />
-              )}
             </div>
           ) : (
             <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center">
