@@ -117,6 +117,7 @@ Tables utilisées par l'app projets :
 - `project_doc_files`
 - `project_tracking_fields`
 - `project_updates`
+- `project_interventions`
 
 Le schéma est créé automatiquement par `src/lib/projectsStore.ts` au premier accès API si les tables n'existent pas. Les migrations simples, comme `tasks.section_id`, sont aussi gérées dans ce fichier.
 
@@ -170,6 +171,7 @@ Fonctionnalités actuelles :
 - Onglet Docs avec dossiers et fichiers `.md` créés dans l'app
 - Onglet Pilotage calculé à partir des tâches
 - Onglet Suivi avec indicateurs libres
+- Onglet Interventions avec date, département, ville, intervention, prix, statut et note
 
 Projet important actuellement :
 

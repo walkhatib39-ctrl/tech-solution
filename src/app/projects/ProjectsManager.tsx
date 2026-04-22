@@ -38,12 +38,15 @@ import {
 } from "lucide-react";
 import {
   CurrentProjectUser,
+  INTERVENTION_STATUSES,
+  InterventionStatus,
   ManagedProject,
   ManagedTask,
   PROJECT_STATUSES,
   PROJECT_TYPES,
   ProjectDocFile,
   ProjectDocFolder,
+  ProjectIntervention,
   ProjectTrackingField,
   ProjectTeamUser,
   ProjectUpdate,
@@ -62,14 +65,14 @@ import {
 type SaveState = "idle" | "saving" | "saved" | "error";
 type StatusFilter = TaskStatus | "Tous";
 type ResponsibleFilter = string | "Tous";
-type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Suivi";
+type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Interventions" | "Suivi";
 type WorkspaceView = "project" | "team";
 type ProjectStats = { blocked: number; done: number; overdue: number; progress: number; total: number };
 type TaskSectionGroup = { id: string | null; color: string; name: string; tasks: ManagedTask[] };
 
 const EMPTY_DATA: ProjectsData = {
   projects: [], taskSections: [], tasks: [], docFolders: [], docFiles: [],
-  trackingFields: [], updates: [], teamUsers: [], projectAccess: [], updatedAt: "",
+  trackingFields: [], updates: [], interventions: [], teamUsers: [], projectAccess: [], updatedAt: "",
 };
 
 // ─── Style maps ─────────────────────────────────────────────────────────────
@@ -100,15 +103,25 @@ const TRACKING_META: Record<TrackingStatus, { cls: string; bar: string }> = {
   "En cours":{ cls:"bg-sky-50 text-sky-700",         bar: "bg-sky-400"     },
 };
 
+const INTERVENTION_META: Record<InterventionStatus, { cls: string; dot: string }> = {
+  Prévue:      { cls: "bg-sky-50 text-sky-700",       dot: "bg-sky-500" },
+  Réalisée:    { cls: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
+  Reportée:    { cls: "bg-amber-50 text-amber-700",     dot: "bg-amber-500" },
+  Annulée:     { cls: "bg-red-50 text-red-600",         dot: "bg-red-500" },
+  "À facturer":{ cls: "bg-violet-50 text-violet-700",   dot: "bg-violet-500" },
+  Payée:       { cls: "bg-slate-100 text-slate-600",    dot: "bg-slate-500" },
+};
+
 const STATUS_DOT: Record<ManagedProject["status"], string> = {
   Actif: "bg-emerald-400", "En pause": "bg-amber-400", Terminé: "bg-slate-400",
 };
 
-const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType }> = [
-  { label: "Pilotage", icon: SlidersHorizontal },
-  { label: "Tâches",   icon: Columns3          },
-  { label: "Docs",     icon: BookOpen          },
-  { label: "Suivi",    icon: BarChart3         },
+const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType; shortLabel?: string }> = [
+  { label: "Pilotage",      icon: SlidersHorizontal },
+  { label: "Tâches",        icon: Columns3          },
+  { label: "Docs",          icon: BookOpen          },
+  { label: "Interventions", icon: Calendar, shortLabel: "Interv." },
+  { label: "Suivi",         icon: BarChart3         },
 ];
 
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
@@ -138,6 +151,33 @@ function getPriorityWeight(p: TaskPriority) {
 function buildBlankTask(projectId: string): Omit<ManagedTask, "id"> {
   return { title: "", projectId, status: "À faire", priority: "Moyenne",
            sectionId: null, startDate: "", dueDate: "", note: "", responsible: "" };
+}
+
+function buildBlankIntervention(projectId: string): Omit<ProjectIntervention, "id"> {
+  return {
+    projectId,
+    interventionDate: new Date().toISOString().slice(0, 10),
+    department: "",
+    city: "",
+    intervention: "",
+    price: 0,
+    status: "Réalisée",
+    note: "",
+  };
+}
+
+function parsePrice(value: string) {
+  const normalized = value.replace(",", ".").trim();
+  const price = Number(normalized);
+  return Number.isFinite(price) ? Math.max(0, Math.round(price * 100) / 100) : 0;
+}
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("fr-FR", {
+    currency: "EUR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(value);
 }
 
 function buildTrackingTemplate(project: ManagedProject): ProjectTrackingField[] {
@@ -262,6 +302,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const selectedDocFile  = useMemo(() => projectFiles.find((f) => f.id === selectedDocFileId) ?? projectFiles[0], [selectedDocFileId, projectFiles]);
   const trackingFields   = useMemo(() => !selectedProject ? [] : data.trackingFields.filter((f) => f.projectId === selectedProject.id).sort((a, b) => a.position - b.position), [data.trackingFields, selectedProject]);
   const projectUpdates   = useMemo(() => !selectedProject ? [] : data.updates.filter((u) => u.projectId === selectedProject.id), [data.updates, selectedProject]);
+  const projectInterventions = useMemo(() => !selectedProject ? [] : data.interventions.filter((intervention) => intervention.projectId === selectedProject.id), [data.interventions, selectedProject]);
 
   const responsibleOptions = useMemo(() =>
     Array.from(new Set(projectTasks.map((t) => t.responsible.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -387,6 +428,26 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const handleDeleteTracking    = (id: string) => updateData((c) => ({ ...c, trackingFields: c.trackingFields.filter((f) => f.id !== id) }));
   const handleAddUpdate         = (u: Omit<ProjectUpdate, "id">) => { if (!u.title.trim()) return; updateData((c) => ({ ...c, updates: [{ ...u, id: createId("update"), title: u.title.trim() }, ...c.updates] })); };
   const handleDeleteUpdate      = (id: string) => updateData((c) => ({ ...c, updates: c.updates.filter((u) => u.id !== id) }));
+  const handleAddIntervention   = (intervention: Omit<ProjectIntervention, "id">) => {
+    if (!intervention.intervention.trim()) return;
+    updateData((c) => ({
+      ...c,
+      interventions: [
+        { ...intervention, id: createId("intervention"), intervention: intervention.intervention.trim() },
+        ...c.interventions,
+      ],
+    }));
+  };
+  const handleUpdateIntervention = (id: string, patch: Partial<ProjectIntervention>) => updateData((c) => ({
+    ...c,
+    interventions: c.interventions.map((intervention) =>
+      intervention.id === id ? { ...intervention, ...patch } : intervention
+    ),
+  }));
+  const handleDeleteIntervention = (id: string) => updateData((c) => ({
+    ...c,
+    interventions: c.interventions.filter((intervention) => intervention.id !== id),
+  }));
   const handleAddTeamUser       = (user: Omit<ProjectTeamUser, "id" | "role" | "isActive">) => {
     if (!isSuperAdmin || !user.name.trim() || !user.email.trim()) return;
     updateData((c) => ({
@@ -675,13 +736,15 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 )}
 
                 <div className="mt-3 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
-                  <nav className="grid grid-cols-4 gap-1 rounded-2xl bg-slate-50 p-1 sm:flex sm:min-w-0 sm:overflow-x-auto sm:rounded-none sm:bg-transparent sm:p-0">
-                    {PROJECT_TABS.map(({ label, icon: Icon }) => {
+                  <nav className="grid grid-cols-5 gap-1 rounded-2xl bg-slate-50 p-1 sm:flex sm:min-w-0 sm:overflow-x-auto sm:rounded-none sm:bg-transparent sm:p-0">
+                    {PROJECT_TABS.map(({ label, icon: Icon, shortLabel }) => {
                       const active = activeTab === label;
                       return (
                         <button key={label} onClick={() => setActiveTab(label)} type="button"
-                          className={`flex min-w-0 shrink-0 items-center justify-center gap-1 rounded-xl px-1.5 py-2 text-[11px] font-semibold transition-all sm:justify-start sm:gap-2 sm:rounded-none sm:border-b-2 sm:px-4 sm:py-3 sm:text-sm ${active ? "bg-white text-slate-900 shadow-sm sm:border-[#d9140e] sm:bg-transparent sm:shadow-none" : "text-slate-400 hover:bg-white/70 hover:text-slate-600 sm:border-transparent sm:hover:border-slate-200 sm:hover:bg-transparent"}`}>
-                          <Icon className="hidden h-3.5 w-3.5 sm:block" /> {label}
+                          className={`flex min-w-0 shrink-0 items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold transition-all sm:justify-start sm:gap-2 sm:rounded-none sm:border-b-2 sm:px-4 sm:py-3 sm:text-sm ${active ? "bg-white text-slate-900 shadow-sm sm:border-[#d9140e] sm:bg-transparent sm:shadow-none" : "text-slate-400 hover:bg-white/70 hover:text-slate-600 sm:border-transparent sm:hover:border-slate-200 sm:hover:bg-transparent"}`}>
+                          <Icon className="hidden h-3.5 w-3.5 sm:block" />
+                          <span className="truncate sm:hidden">{shortLabel ?? label}</span>
+                          <span className="hidden sm:inline">{label}</span>
                         </button>
                       );
                     })}
@@ -747,6 +810,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               {activeTab === "Pilotage" && <PilotageTab nextActionTasks={nextActionTasks} blockedTasks={blockedTasks} project={selectedProject} stats={stats} />}
               {activeTab === "Tâches"   && <TachesTab groups={taskGroups} onChangeStatus={handleChangeTaskStatus} onDeleteSection={handleDeleteTaskSection} onDeleteTask={handleDeleteTask} onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }} />}
               {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
+              {activeTab === "Interventions" && <InterventionsTab key={selectedProject.id} interventions={projectInterventions} onAdd={handleAddIntervention} onDelete={handleDeleteIntervention} onUpdate={handleUpdateIntervention} projectId={selectedProject.id} />}
               {activeTab === "Suivi"    && <SuiviTab fields={trackingFields} updates={projectUpdates} project={selectedProject} onAddField={handleAddTracking} onUpdateField={handleUpdateTracking} onDeleteField={handleDeleteTracking} onAddUpdate={handleAddUpdate} onDeleteUpdate={handleDeleteUpdate} />}
             </div>
           ) : (
@@ -1569,6 +1633,213 @@ function MarkdownPreview({ content }: { content: string }) {
         return <p key={i} className="whitespace-pre-wrap text-slate-600">{line}</p>;
       })}
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── INTERVENTIONS TAB ───────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
+function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId }: {
+  interventions: ProjectIntervention[];
+  onAdd: (intervention: Omit<ProjectIntervention, "id">) => void;
+  onDelete: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<ProjectIntervention>) => void;
+  projectId: string;
+}) {
+  const [draft, setDraft] = useState<Omit<ProjectIntervention, "id">>(() => buildBlankIntervention(projectId));
+  const [departmentFilter, setDepartmentFilter] = useState("Tous");
+  const [statusFilter, setStatusFilter] = useState<InterventionStatus | "Tous">("Tous");
+  const [monthFilter, setMonthFilter] = useState("Tous");
+
+  const departmentOptions = useMemo(() =>
+    Array.from(new Set(interventions.map((intervention) => intervention.department.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [interventions]
+  );
+
+  const monthOptions = useMemo(() =>
+    Array.from(new Set(interventions.map((intervention) => intervention.interventionDate.slice(0, 7)).filter(Boolean))).sort().reverse(),
+    [interventions]
+  );
+
+  const filteredInterventions = useMemo(() =>
+    interventions
+      .filter((intervention) =>
+        (departmentFilter === "Tous" || intervention.department === departmentFilter) &&
+        (statusFilter === "Tous" || intervention.status === statusFilter) &&
+        (monthFilter === "Tous" || intervention.interventionDate.startsWith(monthFilter))
+      )
+      .sort((a, b) => (b.interventionDate || "").localeCompare(a.interventionDate || "")),
+    [departmentFilter, interventions, monthFilter, statusFilter]
+  );
+
+  const stats = useMemo(() => {
+    const billable = interventions.filter((intervention) => intervention.status !== "Annulée");
+    return {
+      total: interventions.length,
+      revenue: billable.reduce((sum, intervention) => sum + intervention.price, 0),
+      done: interventions.filter((intervention) => ["Réalisée", "À facturer", "Payée"].includes(intervention.status)).length,
+      toInvoice: interventions.filter((intervention) => intervention.status === "À facturer").length,
+    };
+  }, [interventions]);
+
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!draft.intervention.trim()) return;
+    onAdd({ ...draft, projectId, intervention: draft.intervention.trim() });
+    setDraft(buildBlankIntervention(projectId));
+  };
+
+  return (
+    <div className="space-y-4 border-t border-slate-100 bg-slate-50/50 p-2.5 sm:p-5">
+      <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-3">
+        <InterventionStat label="Total" value={String(stats.total)} />
+        <InterventionStat label="CA" value={formatCurrency(stats.revenue)} />
+        <InterventionStat label="Réalisées" value={String(stats.done)} />
+        <InterventionStat label="À facturer" value={String(stats.toInvoice)} danger={stats.toInvoice > 0} />
+      </div>
+
+      <form onSubmit={submit} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm sm:p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-800">Nouvelle intervention</p>
+            <p className="text-xs text-slate-400">Date, zone, prestation et montant.</p>
+          </div>
+          <button type="submit" className="hidden h-9 items-center gap-1.5 rounded-xl bg-[#d9140e] px-4 text-sm font-semibold text-white transition hover:bg-[#b91010] sm:flex">
+            <Plus className="h-3.5 w-3.5" /> Ajouter
+          </button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-[150px_110px_1fr_1fr_110px_140px]">
+          <input type="date" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, interventionDate: e.target.value }))} value={draft.interventionDate} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Dépt." value={draft.department} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, city: e.target.value }))} placeholder="Ville" value={draft.city} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, intervention: e.target.value }))} placeholder="Intervention" value={draft.intervention} />
+          <input type="number" min="0" step="0.01" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, price: parsePrice(e.target.value) }))} placeholder="Prix" value={draft.price || ""} />
+          <select className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, status: e.target.value as InterventionStatus }))} value={draft.status}>
+            {INTERVENTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+        </div>
+        <textarea className="mt-2 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" rows={2} onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Note optionnelle..." value={draft.note} />
+        <button type="submit" className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#d9140e] text-sm font-semibold text-white transition hover:bg-[#b91010] sm:hidden">
+          <Plus className="h-3.5 w-3.5" /> Ajouter
+        </button>
+      </form>
+
+      <div className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm sm:flex-row sm:items-center">
+        <label className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs text-slate-500">
+          <Filter className="h-3.5 w-3.5 text-slate-400" />
+          <select className="min-w-0 bg-transparent outline-none" onChange={(e) => setStatusFilter(e.target.value as InterventionStatus | "Tous")} value={statusFilter}>
+            <option value="Tous">Tous statuts</option>
+            {INTERVENTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+        </label>
+        <label className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs text-slate-500">
+          <Calendar className="h-3.5 w-3.5 text-slate-400" />
+          <select className="min-w-0 bg-transparent outline-none" onChange={(e) => setMonthFilter(e.target.value)} value={monthFilter}>
+            <option value="Tous">Tous les mois</option>
+            {monthOptions.map((month) => <option key={month} value={month}>{month}</option>)}
+          </select>
+        </label>
+        <label className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs text-slate-500">
+          <FolderKanban className="h-3.5 w-3.5 text-slate-400" />
+          <select className="min-w-0 bg-transparent outline-none" onChange={(e) => setDepartmentFilter(e.target.value)} value={departmentFilter}>
+            <option value="Tous">Tous départements</option>
+            {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
+        <div className="grid grid-cols-[130px_100px_1fr_1.5fr_110px_130px_1.5fr_70px] bg-slate-50/80 px-5 py-2.5">
+          {["Date", "Dépt.", "Ville", "Intervention", "Prix", "Statut", "Note", ""].map((header) => (
+            <div key={header} className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{header}</div>
+          ))}
+        </div>
+        <div className="divide-y divide-slate-100">
+          {filteredInterventions.map((intervention) => (
+            <InterventionTableRow key={intervention.id} intervention={intervention} onDelete={onDelete} onUpdate={onUpdate} />
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2 md:hidden">
+        {filteredInterventions.map((intervention) => (
+          <InterventionMobileCard key={intervention.id} intervention={intervention} onDelete={onDelete} onUpdate={onUpdate} />
+        ))}
+      </div>
+
+      {!filteredInterventions.length && <EmptyState label="Aucune intervention pour ces filtres." small />}
+    </div>
+  );
+}
+
+function InterventionStat({ danger, label, value }: { danger?: boolean; label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-slate-100 bg-white px-2 py-2 text-center shadow-sm sm:min-w-[120px] sm:px-4 sm:py-3">
+      <p className={`truncate text-base font-bold sm:text-lg ${danger ? "text-red-600" : "text-slate-800"}`}>{value}</p>
+      <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[10px]">{label}</p>
+    </div>
+  );
+}
+
+function InterventionTableRow({ intervention, onDelete, onUpdate }: {
+  intervention: ProjectIntervention;
+  onDelete: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<ProjectIntervention>) => void;
+}) {
+  const meta = INTERVENTION_META[intervention.status];
+
+  return (
+    <div className="grid grid-cols-[130px_100px_1fr_1.5fr_110px_130px_1.5fr_70px] items-center px-5 py-3">
+      <input type="date" className="h-8 rounded-lg border border-transparent bg-transparent text-sm text-slate-600 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { interventionDate: e.target.value })} value={intervention.interventionDate} />
+      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm font-semibold text-slate-700 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { department: e.target.value })} value={intervention.department} />
+      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm text-slate-600 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { city: e.target.value })} value={intervention.city} />
+      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm font-semibold text-slate-800 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { intervention: e.target.value })} value={intervention.intervention} />
+      <input type="number" min="0" step="0.01" className="h-8 w-24 rounded-lg border border-transparent bg-transparent text-sm font-semibold text-slate-700 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { price: parsePrice(e.target.value) })} value={intervention.price || ""} />
+      <select className={`h-7 rounded-full border-0 px-3 text-xs font-semibold outline-none ${meta.cls}`} style={{ appearance: "none" }} onChange={(e) => onUpdate(intervention.id, { status: e.target.value as InterventionStatus })} value={intervention.status}>
+        {INTERVENTION_STATUSES.map((status) => <option key={status} value={status} className="bg-white text-slate-800">{status}</option>)}
+      </select>
+      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm text-slate-500 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { note: e.target.value })} value={intervention.note} />
+      <button onClick={() => onDelete(intervention.id)} type="button" className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500">
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function InterventionMobileCard({ intervention, onDelete, onUpdate }: {
+  intervention: ProjectIntervention;
+  onDelete: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<ProjectIntervention>) => void;
+}) {
+  const meta = INTERVENTION_META[intervention.status];
+
+  return (
+    <article className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
+            <p className="truncate text-sm font-bold text-slate-900">{intervention.intervention}</p>
+          </div>
+          <p className="text-xs text-slate-400">{intervention.interventionDate || "Date non définie"} · {intervention.department || "Dépt. non défini"}{intervention.city ? ` · ${intervention.city}` : ""}</p>
+        </div>
+        <button onClick={() => onDelete(intervention.id)} type="button" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <input type="date" className="h-9 rounded-xl border border-slate-200 px-2 text-xs text-slate-600 outline-none" onChange={(e) => onUpdate(intervention.id, { interventionDate: e.target.value })} value={intervention.interventionDate} />
+        <input className="h-9 rounded-xl border border-slate-200 px-2 text-xs text-slate-600 outline-none" onChange={(e) => onUpdate(intervention.id, { department: e.target.value })} placeholder="Département" value={intervention.department} />
+        <input className="h-9 rounded-xl border border-slate-200 px-2 text-xs text-slate-600 outline-none" onChange={(e) => onUpdate(intervention.id, { city: e.target.value })} placeholder="Ville" value={intervention.city} />
+        <input type="number" min="0" step="0.01" className="h-9 rounded-xl border border-slate-200 px-2 text-xs font-semibold text-slate-700 outline-none" onChange={(e) => onUpdate(intervention.id, { price: parsePrice(e.target.value) })} value={intervention.price || ""} />
+        <input className="col-span-2 h-9 rounded-xl border border-slate-200 px-2 text-xs font-semibold text-slate-800 outline-none" onChange={(e) => onUpdate(intervention.id, { intervention: e.target.value })} value={intervention.intervention} />
+        <select className={`col-span-2 h-9 rounded-xl border border-slate-200 px-2 text-xs font-semibold outline-none ${meta.cls}`} onChange={(e) => onUpdate(intervention.id, { status: e.target.value as InterventionStatus })} value={intervention.status}>
+          {INTERVENTION_STATUSES.map((status) => <option key={status} value={status} className="bg-white text-slate-800">{status}</option>)}
+        </select>
+        <textarea className="col-span-2 resize-none rounded-xl border border-slate-200 p-2 text-xs text-slate-600 outline-none" rows={2} onChange={(e) => onUpdate(intervention.id, { note: e.target.value })} placeholder="Note" value={intervention.note} />
+      </div>
+    </article>
   );
 }
 

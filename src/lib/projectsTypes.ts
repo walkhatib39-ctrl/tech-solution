@@ -28,6 +28,15 @@ export const TRACKING_STATUSES = [
   "En cours",
 ] as const;
 
+export const INTERVENTION_STATUSES = [
+  "Prévue",
+  "Réalisée",
+  "Reportée",
+  "Annulée",
+  "À facturer",
+  "Payée",
+] as const;
+
 export const PROJECT_USER_ROLES = ["super_admin", "member"] as const;
 
 export type ProjectType = (typeof PROJECT_TYPES)[number];
@@ -36,6 +45,7 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 export type ProjectHealthStatus = (typeof PROJECT_HEALTH_STATUSES)[number];
 export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
+export type InterventionStatus = (typeof INTERVENTION_STATUSES)[number];
 export type ProjectUserRole = (typeof PROJECT_USER_ROLES)[number];
 
 export interface ManagedProject {
@@ -108,6 +118,18 @@ export interface ProjectUpdate {
   note: string;
 }
 
+export interface ProjectIntervention {
+  id: string;
+  projectId: string;
+  interventionDate: string;
+  department: string;
+  city: string;
+  intervention: string;
+  price: number;
+  status: InterventionStatus;
+  note: string;
+}
+
 export interface ProjectTeamUser {
   id: string;
   name: string;
@@ -138,6 +160,7 @@ export interface ProjectsData {
   docFiles: ProjectDocFile[];
   trackingFields: ProjectTrackingField[];
   updates: ProjectUpdate[];
+  interventions: ProjectIntervention[];
   teamUsers: ProjectTeamUser[];
   projectAccess: ProjectAccess[];
   updatedAt: string;

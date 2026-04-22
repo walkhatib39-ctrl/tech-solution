@@ -5,6 +5,7 @@ import mysql, { Pool, PoolConnection, RowDataPacket } from "mysql2/promise";
 import path from "path";
 import {
   CurrentProjectUser,
+  INTERVENTION_STATUSES,
   ManagedProject,
   ManagedTask,
   PROJECT_HEALTH_STATUSES,
@@ -14,6 +15,7 @@ import {
   ProjectAccess,
   ProjectDocFile,
   ProjectDocFolder,
+  ProjectIntervention,
   ProjectTrackingField,
   ProjectTeamUser,
   ProjectUpdate,
@@ -235,6 +237,16 @@ function normalizeProgress(progress: unknown) {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
+function normalizePrice(value: unknown) {
+  const price = Number(value);
+
+  if (!Number.isFinite(price)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round(price * 100) / 100);
+}
+
 function normalizeProject(project: Partial<ManagedProject>): ManagedProject | null {
   if (!project || typeof project.name !== "string" || !project.name.trim()) {
     return null;
@@ -451,6 +463,48 @@ function normalizeProjectUpdate(
   };
 }
 
+function normalizeIntervention(
+  intervention: Partial<ProjectIntervention>
+): ProjectIntervention | null {
+  if (
+    !intervention ||
+    typeof intervention.projectId !== "string" ||
+    !intervention.projectId.trim() ||
+    typeof intervention.intervention !== "string" ||
+    !intervention.intervention.trim()
+  ) {
+    return null;
+  }
+
+  const status = INTERVENTION_STATUSES.includes(
+    intervention.status ?? "Réalisée"
+  )
+    ? intervention.status ?? "Réalisée"
+    : "Réalisée";
+
+  return {
+    id:
+      typeof intervention.id === "string" && intervention.id.trim()
+        ? intervention.id.trim()
+        : createId("intervention"),
+    projectId: intervention.projectId.trim(),
+    interventionDate:
+      typeof intervention.interventionDate === "string"
+        ? intervention.interventionDate
+        : "",
+    department:
+      typeof intervention.department === "string"
+        ? intervention.department.trim()
+        : "",
+    city:
+      typeof intervention.city === "string" ? intervention.city.trim() : "",
+    intervention: intervention.intervention.trim(),
+    price: normalizePrice(intervention.price),
+    status,
+    note: typeof intervention.note === "string" ? intervention.note : "",
+  };
+}
+
 function normalizeTeamUser(user: Partial<ProjectTeamUser>): ProjectTeamUser | null {
   if (
     !user ||
@@ -626,6 +680,13 @@ function normalizeProjectsData(input: Partial<ProjectsData>): ProjectsData {
           Boolean(update && projectIds.has(update.projectId))
         )
     : [];
+  const interventions = Array.isArray(input.interventions)
+    ? input.interventions
+        .map((intervention) => normalizeIntervention(intervention))
+        .filter((intervention): intervention is ProjectIntervention =>
+          Boolean(intervention && projectIds.has(intervention.projectId))
+        )
+    : [];
   const teamUsers = Array.isArray(input.teamUsers)
     ? input.teamUsers
         .map((user) => normalizeTeamUser(user))
@@ -657,6 +718,7 @@ function normalizeProjectsData(input: Partial<ProjectsData>): ProjectsData {
     docFiles,
     trackingFields,
     updates,
+    interventions,
     teamUsers,
     projectAccess,
     updatedAt:
@@ -682,6 +744,7 @@ function readLegacySeed(): ProjectsData {
     docFiles: [],
     trackingFields: [],
     updates: [],
+    interventions: [],
     teamUsers: DEFAULT_TEAM_USERS,
     projectAccess: [],
   });
@@ -849,6 +912,27 @@ async function ensureProjectsSchema() {
     `);
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_interventions (
+        id VARCHAR(120) NOT NULL PRIMARY KEY,
+        project_id VARCHAR(120) NOT NULL,
+        intervention_date DATE NULL,
+        department VARCHAR(80) NULL,
+        city VARCHAR(190) NULL,
+        intervention VARCHAR(255) NOT NULL,
+        price DECIMAL(10,2) NOT NULL DEFAULT 0,
+        status VARCHAR(40) NOT NULL,
+        note TEXT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_project_interventions_project (project_id),
+        INDEX idx_project_interventions_date (intervention_date),
+        CONSTRAINT fk_project_interventions_project
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS project_access (
         user_id VARCHAR(120) NOT NULL,
         project_id VARCHAR(120) NOT NULL,
@@ -931,6 +1015,7 @@ async function saveProjectsDataWithoutSchema(
   const data = normalizeProjectsData({
     docFiles: [],
     docFolders: [],
+    interventions: [],
     projectAccess: [],
     taskSections: [],
     teamUsers: [],
@@ -947,6 +1032,7 @@ async function saveProjectsDataWithoutSchema(
   );
 
   await queryable.query("DELETE FROM project_access");
+  await queryable.query("DELETE FROM project_interventions");
   await queryable.query("DELETE FROM project_updates");
   await queryable.query("DELETE FROM project_tracking_fields");
   await queryable.query("DELETE FROM project_doc_files");
@@ -1087,6 +1173,25 @@ async function saveProjectsDataWithoutSchema(
     );
   }
 
+  for (const intervention of data.interventions) {
+    await queryable.execute(
+      `INSERT INTO project_interventions
+        (id, project_id, intervention_date, department, city, intervention, price, status, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        intervention.id,
+        intervention.projectId,
+        toNullableDate(intervention.interventionDate),
+        intervention.department,
+        intervention.city,
+        intervention.intervention,
+        intervention.price,
+        intervention.status,
+        intervention.note,
+      ]
+    );
+  }
+
   for (const access of data.projectAccess) {
     await queryable.execute(
       `INSERT IGNORE INTO project_access (user_id, project_id)
@@ -1177,6 +1282,20 @@ export async function getProjectsData(): Promise<ProjectsData> {
      FROM project_updates
      ORDER BY update_date DESC, created_at DESC`
   );
+  const [interventionRows] = await pool.query<RowDataPacket[]>(
+    `SELECT
+      id,
+      project_id AS projectId,
+      intervention_date AS interventionDate,
+      department,
+      city,
+      intervention,
+      price,
+      status,
+      note
+     FROM project_interventions
+     ORDER BY intervention_date DESC, created_at DESC`
+  );
   const [userRows] = await pool.query<RowDataPacket[]>(
     `SELECT
       id,
@@ -1258,6 +1377,17 @@ export async function getProjectsData(): Promise<ProjectsData> {
       projectId: String(row.projectId),
       date: fromDate(row.date),
       title: String(row.title),
+      note: String(row.note ?? ""),
+    })),
+    interventions: interventionRows.map((row) => ({
+      id: String(row.id),
+      projectId: String(row.projectId),
+      interventionDate: fromDate(row.interventionDate),
+      department: String(row.department ?? ""),
+      city: String(row.city ?? ""),
+      intervention: String(row.intervention),
+      price: normalizePrice(row.price),
+      status: row.status,
       note: String(row.note ?? ""),
     })),
     teamUsers: userRows.map((row) => ({
@@ -1386,6 +1516,9 @@ function filterProjectsDataForUser(
       allowedProjectIds.has(field.projectId)
     ),
     updates: data.updates.filter((update) => allowedProjectIds.has(update.projectId)),
+    interventions: data.interventions.filter((intervention) =>
+      allowedProjectIds.has(intervention.projectId)
+    ),
     teamUsers: includeTeam ? data.teamUsers : [],
     projectAccess: includeTeam ? data.projectAccess : [],
   };
@@ -1481,6 +1614,11 @@ export async function saveProjectsDataForUser(
     updates: replaceProjectScopedItems(
       currentData.updates,
       incomingData.updates,
+      allowedProjectIds
+    ),
+    interventions: replaceProjectScopedItems(
+      currentData.interventions,
+      incomingData.interventions,
       allowedProjectIds
     ),
     teamUsers: currentData.teamUsers,
