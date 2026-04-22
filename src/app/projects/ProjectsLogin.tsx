@@ -37,11 +37,11 @@ export default function ProjectsLogin({
             <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#d9140e]">
               <Lock className="h-8 w-8 text-white" />
             </div>
-            <h1 className="mb-2 whitespace-nowrap text-2xl font-bold leading-tight text-[#39547c]">
-              Connexion projets
+            <h1 className="mb-2 text-2xl font-bold text-[#39547c]">
+              Espace projets
             </h1>
             <p className="text-gray-600">
-              Espace interne de gestion de projets
+              Connexion à votre espace interne
             </p>
           </div>
 
@@ -118,11 +118,6 @@ export default function ProjectsLogin({
 
           <div className="mt-6 text-center text-sm text-gray-500">
             Tech-Solution Projets © 2026
-            {passwordState.isUsingDevFallback && (
-              <div className="mt-1 text-xs text-blue-600">
-                Mode local actif
-              </div>
-            )}
           </div>
         </div>
       </div>
