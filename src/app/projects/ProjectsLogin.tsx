@@ -37,7 +37,10 @@ export default function ProjectsLogin({
             <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#d9140e]">
               <Lock className="h-8 w-8 text-white" />
             </div>
-            <h1 className="mb-2 text-[22px] font-bold leading-tight text-[#39547c] sm:text-2xl">
+            <h1
+              className="mb-2 font-bold text-[#39547c]"
+              style={{ fontSize: "22px", letterSpacing: 0, lineHeight: 1.2 }}
+            >
               Espace projets
             </h1>
             <p className="text-gray-600">
