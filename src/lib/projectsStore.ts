@@ -2802,6 +2802,11 @@ function filterProjectsDataForUser(
   allowedProjectIds: Set<string>,
   includeTeam: boolean
 ): ProjectsData {
+  const filteredProjectAccess = includeTeam
+    ? data.projectAccess.filter((access) => allowedProjectIds.has(access.projectId))
+    : [];
+  const visibleUserIds = new Set(filteredProjectAccess.map((access) => access.userId));
+
   return {
     ...data,
     projects: data.projects.filter((project) => allowedProjectIds.has(project.id)),
@@ -2820,8 +2825,12 @@ function filterProjectsDataForUser(
     interventions: data.interventions.filter((intervention) =>
       allowedProjectIds.has(intervention.projectId)
     ),
-    teamUsers: includeTeam ? data.teamUsers : [],
-    projectAccess: includeTeam ? data.projectAccess : [],
+    teamUsers: includeTeam
+      ? data.teamUsers.filter(
+          (user) => user.role === "super_admin" || visibleUserIds.has(user.id)
+        )
+      : [],
+    projectAccess: filteredProjectAccess,
     activityLogs: data.activityLogs.filter((log) =>
       allowedProjectIds.has(log.projectId)
     ),
@@ -2838,7 +2847,7 @@ export async function getProjectsDataForUser(
   }
 
   const allowedProjectIds = await getAccessibleProjectIds(user);
-  return filterProjectsDataForUser(data, allowedProjectIds, false);
+  return filterProjectsDataForUser(data, allowedProjectIds, true);
 }
 
 export async function saveProjectsData(
