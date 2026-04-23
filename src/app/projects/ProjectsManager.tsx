@@ -16,6 +16,7 @@ import {
   Clock3,
   Columns3,
   Eye,
+  Download,
   FileText,
   Filter,
   Folder,
@@ -522,6 +523,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
   }, [currentUser, data.projectAccess, data.teamUsers, selectedProject]);
   const shouldHideProjectStats =
+    activeTab === "Docs" ||
     (activeTab === "Tâches" && (isTaskEditorOpen || previewTask !== null)) ||
     (activeTab === "Interventions" && (isInterventionEditorOpen || previewIntervention !== null));
 
@@ -706,7 +708,11 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       projectId: pid,
       folderId: fid,
       title: clean.endsWith(".md") ? clean : `${clean}.md`,
+      sourceType: "markdown",
       contentMarkdown: `# ${clean.replace(/\.md$/i, "")}\n\n`,
+      assetPath: "",
+      mimeType: "text/markdown",
+      size: 0,
       createdAt: now,
       createdBy: currentUser.name,
       updatedAt: now,
@@ -717,6 +723,60 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   };
   const handleUpdateDocFile     = (id: string, patch: Partial<ProjectDocFile>) => updateData((c) => ({ ...c, docFiles: c.docFiles.map((f) => f.id === id ? { ...f, ...patch, updatedAt: new Date().toISOString(), updatedBy: currentUser.name } : f) }));
   const handleDeleteDocFile     = (id: string) => updateData((c) => ({ ...c, docFiles: c.docFiles.filter((f) => f.id !== id) }));
+  const handleUploadDocFiles    = async (pid: string, fid: string | null, filesToUpload: File[]) => {
+    if (!filesToUpload.length) return [];
+
+    const formData = new FormData();
+    formData.append("projectId", pid);
+    filesToUpload.forEach((file) => formData.append("files", file));
+
+    const response = await fetch("/api/projects/docs/upload", {
+      body: formData,
+      method: "POST",
+    });
+
+    if (response.status === 401) {
+      window.location.reload();
+      return [];
+    }
+
+    const payload = (await response.json().catch(() => null)) as
+      | {
+          documents?: Array<{
+            assetPath: string;
+            mimeType: string;
+            size: number;
+            title: string;
+          }>;
+          error?: string;
+        }
+      | null;
+
+    if (!response.ok || !payload?.documents) {
+      throw new Error(payload?.error || "Erreur lors de l’envoi des documents.");
+    }
+
+    const now = new Date().toISOString();
+    const createdFiles: ProjectDocFile[] = payload.documents.map((document) => ({
+      id: createId("doc"),
+      projectId: pid,
+      folderId: fid,
+      title: document.title,
+      sourceType: "upload",
+      contentMarkdown: "",
+      assetPath: document.assetPath,
+      mimeType: document.mimeType,
+      size: document.size,
+      createdAt: now,
+      createdBy: currentUser.name,
+      updatedAt: now,
+      updatedBy: currentUser.name,
+    }));
+
+    updateData((c) => ({ ...c, docFiles: [...createdFiles, ...c.docFiles] }));
+    setSelectedDocFileId(createdFiles[0]?.id ?? "");
+    return createdFiles;
+  };
   const handleAddTracking       = (pid: string, label: string) => { if (!label.trim()) return; updateData((c) => ({ ...c, trackingFields: [...c.trackingFields, { id: createId("metric"), projectId: pid, label: label.trim(), value: "", target: "", unit: "", status: "En cours" as TrackingStatus, note: "", position: trackingFields.length }] })); };
   const handleUpdateTracking    = (id: string, patch: Partial<ProjectTrackingField>) => updateData((c) => ({ ...c, trackingFields: c.trackingFields.map((f) => f.id === id ? { ...f, ...patch } : f) }));
   const handleDeleteTracking    = (id: string) => updateData((c) => ({ ...c, trackingFields: c.trackingFields.filter((f) => f.id !== id) }));
@@ -1215,7 +1275,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                   />
                 )
               )}
-              {activeTab === "Docs"     && <DocsTab activityLogs={projectActivityLogs} files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
+              {activeTab === "Docs"     && <DocsTab activityLogs={projectActivityLogs} files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} onUploadFiles={handleUploadDocFiles} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
               {activeTab === "Interventions" && (
                 isInterventionEditorOpen ? (
                   <InterventionEditorPage
@@ -1736,28 +1796,87 @@ function MobileTaskMeta({ className = "", danger, icon, label, value }: { classN
 // ── DOCS TAB ────────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDeleteFile, onDeleteFolder, onSelectFile, onUpdateFile, projectId, selectedFile }: {
-  activityLogs: ProjectActivityLog[];
+function isMarkdownDocFile(file: ProjectDocFile) {
+  return file.sourceType !== "upload";
+}
+
+function isImageDocFile(file: ProjectDocFile) {
+  return file.sourceType === "upload" && file.mimeType.startsWith("image/");
+}
+
+function isPdfDocFile(file: ProjectDocFile) {
+  return file.sourceType === "upload" && file.mimeType === "application/pdf";
+}
+
+function getDocFileTypeLabel(file: ProjectDocFile) {
+  if (isMarkdownDocFile(file)) return "MD";
+  if (file.mimeType === "application/pdf") return "PDF";
+  if (file.mimeType === "application/msword") return "DOC";
+  if (
+    file.mimeType ===
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  ) {
+    return "DOCX";
+  }
+  if (file.mimeType === "image/png") return "PNG";
+  if (file.mimeType === "image/webp") return "WEBP";
+  if (file.mimeType === "image/jpeg") return "JPG";
+  return "FICHIER";
+}
+
+function getDocTypeBadgeClass(file: ProjectDocFile) {
+  if (isMarkdownDocFile(file)) {
+    return "bg-[var(--tsp-bg-surface)] text-[var(--tsp-text-secondary)]";
+  }
+
+  if (isImageDocFile(file)) {
+    return "bg-[#f0fdf4] text-[#15803d]";
+  }
+
+  if (isPdfDocFile(file)) {
+    return "bg-[#eff6ff] text-[#1d4ed8]";
+  }
+
+  return "bg-[#fef3c7] text-[#92400e]";
+}
+
+function getDocFileSummary(file: ProjectDocFile) {
+  if (isMarkdownDocFile(file)) {
+    return "Note markdown";
+  }
+
+  const typeLabel = getDocFileTypeLabel(file);
+  return `${typeLabel} · ${formatAttachmentSize(file.size)}`;
+}
+
+function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDeleteFile, onDeleteFolder, onSelectFile, onUpdateFile, onUploadFiles, projectId, selectedFile }: {
+  activityLogs: ProjectActivityLog[]; 
   files: ProjectDocFile[]; folders: ProjectDocFolder[];
   onAddFile: (pid: string, fid: string | null, title: string) => void;
   onAddFolder: (pid: string, name: string) => void;
   onDeleteFile: (id: string) => void; onDeleteFolder: (id: string) => void;
   onSelectFile: (id: string) => void;
   onUpdateFile: (id: string, patch: Partial<ProjectDocFile>) => void;
+  onUploadFiles: (pid: string, fid: string | null, files: File[]) => Promise<ProjectDocFile[]>;
   projectId: string; selectedFile?: ProjectDocFile;
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string | null>>(new Set([null]));
-  const [newFolderName, setNewFolderName]   = useState("");
-  const [newFileName, setNewFileName]       = useState("");
-  const [addFileTarget, setAddFileTarget]   = useState<string | null | "none">("none");
-  const [addFolderOpen, setAddFolderOpen]   = useState(false);
-  const [searchTerm, setSearchTerm]         = useState("");
-  const [editorMode, setEditorMode]         = useState<"split" | "edit" | "preview">("edit");
-  const [mobilePanel, setMobilePanel]       = useState<"browser" | "editor">("browser");
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFileName, setNewFileName] = useState("");
+  const [addFileTarget, setAddFileTarget] = useState<string | null | "none">("none");
+  const [addFolderOpen, setAddFolderOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"read" | "edit">("read");
+  const [mobilePanel, setMobilePanel] = useState<"browser" | "reader">("browser");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadTargetFolderId, setUploadTargetFolderId] = useState<string | null>(null);
 
   const handleSelectFile = (id: string) => {
     onSelectFile(id);
-    setMobilePanel("editor");
+    setViewMode("read");
+    setMobilePanel("reader");
   };
 
   const toggleFolder = (id: string | null) => {
@@ -1768,10 +1887,33 @@ function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDelet
     });
   };
 
-  const rootFiles   = files.filter((f) => f.folderId === null);
-  const allSearched = searchTerm.trim()
-    ? files.filter((f) => f.title.toLowerCase().includes(searchTerm.trim().toLowerCase()))
-    : null;
+  useEffect(() => {
+    setViewMode("read");
+  }, [selectedFile?.id]);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setMobilePanel("browser");
+    }
+  }, [selectedFile]);
+
+  const orderedFolders = useMemo(
+    () => [...folders].sort((a, b) => a.name.localeCompare(b.name)),
+    [folders]
+  );
+  const rootFiles = useMemo(
+    () => files.filter((file) => file.folderId === null),
+    [files]
+  );
+  const allSearched = useMemo(
+    () =>
+      searchTerm.trim()
+        ? files.filter((file) =>
+            file.title.toLowerCase().includes(searchTerm.trim().toLowerCase())
+          )
+        : null,
+    [files, searchTerm]
+  );
 
   const selectedFolder = selectedFile
     ? (selectedFile.folderId ? folders.find((f) => f.id === selectedFile.folderId) : null)
@@ -1788,347 +1930,574 @@ function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDelet
   );
   const createdAtLabel = selectedFile ? formatProjectDateTime(selectedFile.createdAt) : "";
   const updatedAtLabel = selectedFile ? formatProjectDateTime(selectedFile.updatedAt) : "";
+  const canEditSelectedFile = Boolean(selectedFile && isMarkdownDocFile(selectedFile));
+
+  const openUploadPicker = (folderId: string | null) => {
+    setUploadTargetFolderId(folderId);
+    fileInputRef.current?.click();
+  };
+
+  const handleUploadChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFiles = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (!selectedFiles.length) {
+      return;
+    }
+
+    setUploadError("");
+    setIsUploading(true);
+
+    try {
+      const created = await onUploadFiles(
+        projectId,
+        uploadTargetFolderId,
+        selectedFiles
+      );
+      if (created[0]) {
+        onSelectFile(created[0].id);
+        setViewMode("read");
+        setMobilePanel("reader");
+      }
+    } catch (error) {
+      console.error(error);
+      setUploadError(
+        error instanceof Error
+          ? error.message
+          : "Impossible d’importer ces documents."
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const renderFileComposer = (folderId: string | null) => {
+    if (addFileTarget !== folderId) {
+      return null;
+    }
+
+    return (
+      <form
+        className="mt-2 flex items-center gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onAddFile(projectId, folderId, newFileName);
+          setNewFileName("");
+          setAddFileTarget("none");
+        }}
+      >
+        <input
+          autoFocus
+          className="h-10 min-w-0 flex-1 rounded-[10px] border border-[var(--tsp-border)] bg-white px-3 text-[12px] text-[var(--tsp-text)] outline-none"
+          onChange={(event) => setNewFileName(event.target.value)}
+          placeholder="Nom de la note .md"
+          value={newFileName}
+        />
+        <button
+          className="projects-btn-primary flex h-10 w-10 items-center justify-center"
+          disabled={!newFileName.trim()}
+          type="submit"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+        <button
+          className="projects-btn-secondary flex h-10 w-10 items-center justify-center"
+          onClick={() => setAddFileTarget("none")}
+          type="button"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </form>
+    );
+  };
 
   return (
-    <div className="border-t border-slate-100 md:flex md:h-[calc(100vh-220px)] md:min-h-[560px]">
+    <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] p-3 sm:p-5">
+      <input
+        ref={fileInputRef}
+        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+        className="hidden"
+        multiple
+        onChange={handleUploadChange}
+        type="file"
+      />
 
-      {/* ── FILE EXPLORER SIDEBAR ── */}
-      <aside className={`${activeMobilePanel === "browser" ? "flex" : "hidden"} min-h-[520px] flex-col bg-[#f8fafc] md:flex md:w-[260px] md:shrink-0 md:border-r md:border-slate-100`}>
-
-        {/* Sidebar header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4 text-slate-400" />
-            <span className="text-sm font-bold text-slate-700">Documents</span>
-            <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{files.length}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setAddFolderOpen((v) => !v)}
-              type="button" title="Nouveau dossier"
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${addFolderOpen ? "bg-[#0d1b2a] text-white" : "text-slate-400 hover:bg-slate-200 hover:text-slate-700"}`}
-            >
-              <FolderPlus className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => { setAddFileTarget((v) => v === null ? "none" : null); }}
-              type="button" title="Nouveau fichier à la racine"
-              className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${addFileTarget === null ? "bg-[#d9140e] text-white" : "text-slate-400 hover:bg-slate-200 hover:text-slate-700"}`}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* New folder form */}
-        {addFolderOpen && (
-          <form
-            className="border-b border-slate-100 bg-white px-3 py-2.5"
-            onSubmit={(e) => { e.preventDefault(); onAddFolder(projectId, newFolderName); setNewFolderName(""); setAddFolderOpen(false); }}
-          >
-            <div className="flex gap-2">
-              <input
-                autoFocus
-                className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs text-slate-700 placeholder-slate-400 outline-none focus:border-[#0d1b2a]/40 focus:bg-white"
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="Nom du dossier…"
-                value={newFolderName}
-              />
-              <button type="submit" disabled={!newFolderName.trim()} className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#0d1b2a] text-white disabled:opacity-40">
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Search */}
-        <div className="border-b border-slate-100 px-3 py-2.5">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-8 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/30"
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Rechercher un fichier…"
-              value={searchTerm}
-            />
-          </div>
-        </div>
-
-        {/* File tree */}
-        <div className="flex-1 overflow-y-auto py-2">
-          {allSearched ? (
-            /* Search results */
-            <div className="px-2">
-              <div className="mb-1.5 px-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                {allSearched.length} résultat{allSearched.length > 1 ? "s" : ""}
+      <div className="grid gap-3 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className={`${activeMobilePanel === "browser" ? "block" : "hidden"} xl:block`}>
+          <div className="projects-surface overflow-hidden">
+            <div className="border-b border-[var(--tsp-border)] p-[14px]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4 text-[var(--tsp-text-secondary)]" />
+                    <p className="text-[15px] font-semibold text-[var(--tsp-text)]">Documents</p>
+                    <span className="rounded-full bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[10px] font-semibold text-[var(--tsp-text-secondary)]">
+                      {files.length}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[12px] text-[var(--tsp-text-secondary)]">
+                    {folders.length} dossier{folders.length > 1 ? "s" : ""} · {files.length} fichier{files.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    className={`flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] transition ${addFolderOpen ? "bg-[var(--tsp-navy)] text-white" : "bg-white text-[var(--tsp-text-secondary)] hover:bg-[var(--tsp-bg-surface)]"}`}
+                    onClick={() => setAddFolderOpen((value) => !value)}
+                    title="Nouveau dossier"
+                    type="button"
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                  </button>
+                  <button
+                    className={`flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] transition ${addFileTarget === null ? "bg-[var(--tsp-navy)] text-white" : "bg-white text-[var(--tsp-text-secondary)] hover:bg-[var(--tsp-bg-surface)]"}`}
+                    onClick={() => setAddFileTarget((value) => (value === null ? "none" : null))}
+                    title="Nouvelle note"
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                  <button
+                    className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] bg-white text-[var(--tsp-text-secondary)] transition hover:bg-[var(--tsp-bg-surface)]"
+                    disabled={isUploading}
+                    onClick={() => openUploadPicker(null)}
+                    title="Importer des documents"
+                    type="button"
+                  >
+                    {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
-              {allSearched.map((file) => (
-                <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={handleSelectFile} onDelete={onDeleteFile} />
-              ))}
-              {!allSearched.length && <p className="px-3 py-4 text-center text-xs text-slate-400">Aucun résultat.</p>}
-            </div>
-          ) : (
-            /* Tree view */
-            <>
-              {/* Root files */}
-              <div className="px-2">
-                <button
-                  onClick={() => toggleFolder(null)}
-                  type="button"
-                  className="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-500 transition hover:bg-slate-200/60 hover:text-slate-700"
+
+              {addFolderOpen ? (
+                <form
+                  className="mt-3 flex items-center gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    onAddFolder(projectId, newFolderName);
+                    setNewFolderName("");
+                    setAddFolderOpen(false);
+                  }}
                 >
-                  <ChevronRight className={`h-3 w-3 transition-transform text-slate-400 ${expandedFolders.has(null) ? "rotate-90" : ""}`} />
-                  <BookOpen className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="flex-1 truncate">Racine</span>
-                  <span className="rounded px-1 text-[10px] text-slate-400">{rootFiles.length}</span>
-                </button>
+                  <input
+                    autoFocus
+                    className="h-10 min-w-0 flex-1 rounded-[10px] border border-[var(--tsp-border)] bg-white px-3 text-[12px] text-[var(--tsp-text)] outline-none"
+                    onChange={(event) => setNewFolderName(event.target.value)}
+                    placeholder="Nom du dossier"
+                    value={newFolderName}
+                  />
+                  <button
+                    className="projects-btn-primary flex h-10 w-10 items-center justify-center"
+                    disabled={!newFolderName.trim()}
+                    type="submit"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </form>
+              ) : null}
 
-                {expandedFolders.has(null) && (
-                  <div className="ml-4 border-l border-slate-200 pl-2">
-                    {rootFiles.map((file) => (
-                      <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={handleSelectFile} onDelete={onDeleteFile} />
-                    ))}
-                    {/* New file in root */}
-                    {addFileTarget === null ? (
-                      <form className="py-1" onSubmit={(e) => { e.preventDefault(); onAddFile(projectId, null, newFileName); setNewFileName(""); setAddFileTarget("none"); }}>
-                        <div className="flex gap-1.5">
-                          <input autoFocus className="h-7 min-w-0 flex-1 rounded-lg border border-[#d9140e]/30 bg-white px-2 text-xs text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/60" onChange={(e) => setNewFileName(e.target.value)} placeholder="nom-fichier.md" value={newFileName} />
-                          <button type="submit" disabled={!newFileName.trim()} className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#d9140e] text-white disabled:opacity-40"><ChevronRight className="h-3 w-3" /></button>
-                          <button type="button" onClick={() => setAddFileTarget("none")} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200"><X className="h-3 w-3" /></button>
-                        </div>
-                      </form>
-                    ) : (
-                      !rootFiles.length && <p className="py-2 text-center text-[11px] text-slate-400">Vide</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Folders */}
-              {folders.map((folder) => {
-                const folderFiles = files.filter((f) => f.folderId === folder.id);
-                const isExpanded  = expandedFolders.has(folder.id);
-                const isTarget    = addFileTarget === folder.id;
-                return (
-                  <div key={folder.id} className="px-2">
-                    <div className="group flex items-center gap-0">
-                      <button
-                        onClick={() => toggleFolder(folder.id)}
-                        type="button"
-                        className="flex flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-slate-500 transition hover:bg-slate-200/60 hover:text-slate-700"
-                      >
-                        <ChevronRight className={`h-3 w-3 shrink-0 transition-transform text-slate-400 ${isExpanded ? "rotate-90" : ""}`} />
-                        {isExpanded
-                          ? <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                          : <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                        }
-                        <span className="flex-1 truncate">{folder.name}</span>
-                        <span className="rounded px-1 text-[10px] text-slate-400">{folderFiles.length}</span>
-                      </button>
-                      {/* Folder actions */}
-                      <div className="flex shrink-0 items-center gap-0 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
-                        <button
-                          onClick={() => { setAddFileTarget(isTarget ? "none" : folder.id); if (!isExpanded) toggleFolder(folder.id); }}
-                          type="button" title="Nouveau fichier"
-                          className={`flex h-6 w-6 items-center justify-center rounded-md transition ${isTarget ? "bg-[#d9140e] text-white" : "text-slate-400 hover:bg-slate-200"}`}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                        <button onClick={() => onDeleteFolder(folder.id)} type="button" title="Supprimer le dossier" className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 transition hover:bg-red-50 hover:text-red-500">
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="ml-4 border-l border-slate-200 pl-2">
-                        {folderFiles.map((file) => (
-                          <DocFileRow key={file.id} file={file} selected={selectedFile?.id === file.id} onSelect={handleSelectFile} onDelete={onDeleteFile} />
-                        ))}
-                        {/* New file in folder */}
-                        {isTarget ? (
-                          <form className="py-1" onSubmit={(e) => { e.preventDefault(); onAddFile(projectId, folder.id, newFileName); setNewFileName(""); setAddFileTarget("none"); }}>
-                            <div className="flex gap-1.5">
-                              <input autoFocus className="h-7 min-w-0 flex-1 rounded-lg border border-[#d9140e]/30 bg-white px-2 text-xs text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/60" onChange={(e) => setNewFileName(e.target.value)} placeholder="nom-fichier.md" value={newFileName} />
-                              <button type="submit" disabled={!newFileName.trim()} className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#d9140e] text-white disabled:opacity-40"><ChevronRight className="h-3 w-3" /></button>
-                              <button type="button" onClick={() => setAddFileTarget("none")} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200"><X className="h-3 w-3" /></button>
-                            </div>
-                          </form>
-                        ) : (
-                          !folderFiles.length && <p className="py-2 text-center text-[11px] text-slate-400">Vide</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          )}
-        </div>
-      </aside>
-
-      {/* ── EDITOR ── */}
-      <div className={`${activeMobilePanel === "editor" ? "flex" : "hidden"} min-h-[560px] min-w-0 flex-1 flex-col bg-white md:flex md:min-h-0`}>
-        {selectedFile ? (
-          <>
-            {/* Editor top bar */}
-            <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-slate-100 bg-[#f8fafc] px-3 py-2 md:h-12 md:flex-nowrap md:gap-3 md:px-5 md:py-0">
-              <button
-                onClick={() => setMobilePanel("browser")}
-                type="button"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 md:hidden"
-                title="Retour aux documents"
-              >
-                <ChevronRight className="h-4 w-4 rotate-180" />
-              </button>
-              {/* Breadcrumb */}
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-slate-400">
-                <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                {selectedFolder && (
-                  <>
-                    <span className="truncate font-medium text-slate-500">{selectedFolder.name}</span>
-                    <ChevronRight className="h-3 w-3 shrink-0" />
-                  </>
-                )}
+              <div className="relative mt-3">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--tsp-text-secondary)]" />
                 <input
-                  className="h-7 min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-1.5 font-semibold text-slate-700 outline-none transition hover:border-slate-200 hover:bg-white focus:border-[#d9140e]/30 focus:bg-white"
-                  onChange={(e) => onUpdateFile(selectedFile.id, { title: e.target.value })}
-                  value={selectedFile.title}
+                  className="h-10 w-full rounded-[10px] border border-[var(--tsp-border)] bg-white pl-10 pr-3 text-[12px] text-[var(--tsp-text)] outline-none"
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Rechercher un document..."
+                  value={searchTerm}
                 />
               </div>
-              {/* View toggle */}
-              <div className="order-3 flex w-full items-center gap-0.5 rounded-lg border border-slate-200 bg-white p-0.5 md:order-none md:w-auto">
-                {(["edit", "split", "preview"] as const).map((mode) => {
-                  const labels = { edit: "Édition", split: "Côte à côte", preview: "Aperçu" };
-                  const icons  = { edit: <Pencil className="h-3.5 w-3.5" />, split: <Eye className="h-3.5 w-3.5" />, preview: <BookOpen className="h-3.5 w-3.5" /> };
-                  return (
-                    <button key={mode} onClick={() => setEditorMode(mode)} type="button"
-                      className={`flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition md:flex-none ${mode === "split" ? "hidden md:flex" : ""} ${editorMode === mode ? "bg-[#0d1b2a] text-white shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-                      {icons[mode]}
-                      <span className="hidden sm:inline">{labels[mode]}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {/* Delete */}
-              <button onClick={() => onDeleteFile(selectedFile.id)} type="button"
-                className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500 md:px-3">
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+
+              {uploadError ? (
+                <p className="mt-2 text-[12px] text-[var(--tsp-red)]">{uploadError}</p>
+              ) : null}
             </div>
 
-            <div className="border-b border-slate-100 bg-white px-3 py-3 md:px-5">
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedFolder ? (
-                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                    {selectedFolder.name}
-                  </span>
-                ) : null}
-                {createdAtLabel ? (
-                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                    Créé {createdAtLabel}
-                    {selectedFile.createdBy ? ` · ${selectedFile.createdBy}` : ""}
-                  </span>
-                ) : null}
-                {updatedAtLabel ? (
-                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
-                    Mis à jour {updatedAtLabel}
-                    {selectedFile.updatedBy ? ` · ${selectedFile.updatedBy}` : ""}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Editor body */}
-            <div className="flex min-h-0 flex-1 flex-col">
-              {/* Textarea */}
-              <div className={`flex min-h-0 flex-1 flex-col ${editorMode === "split" ? "md:grid md:grid-cols-2 md:divide-x md:divide-slate-100" : ""}`}>
-                {(editorMode === "edit" || editorMode === "split") && (
-                  <div className="flex min-h-0 flex-col">
-                  {editorMode === "split" && (
-                    <div className="border-b border-slate-100 bg-[#f8fafc] px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Markdown
+            <div className="max-h-[70dvh] overflow-y-auto p-2">
+              {allSearched ? (
+                <div className="space-y-2">
+                  <div className="px-1.5 text-[11px] font-semibold uppercase tracking-[0.45px] text-[var(--tsp-text-secondary)]">
+                    Résultats
+                  </div>
+                  {allSearched.length ? (
+                    allSearched.map((file) => (
+                      <DocFileRow
+                        key={file.id}
+                        file={file}
+                        onDelete={onDeleteFile}
+                        onSelect={handleSelectFile}
+                        selected={selectedFile?.id === file.id}
+                      />
+                    ))
+                  ) : (
+                    <div className="projects-surface-soft px-3 py-4 text-center text-[12px] text-[var(--tsp-text-secondary)]">
+                      Aucun document pour cette recherche.
                     </div>
                   )}
-                  <textarea
-                    className="min-h-[420px] flex-1 resize-none bg-white p-4 font-mono text-[13px] leading-7 text-slate-700 outline-none placeholder-slate-300 md:min-h-0 md:p-5"
-                    placeholder="Commencez à écrire en Markdown…"
-                    onChange={(e) => onUpdateFile(selectedFile.id, { contentMarkdown: e.target.value })}
-                    value={selectedFile.contentMarkdown}
-                  />
-                  </div>
-                )}
-                {/* Preview */}
-                {(editorMode === "preview" || editorMode === "split") && (
-                  <div className={`${editorMode === "split" ? "hidden md:flex" : "flex"} min-h-0 flex-col overflow-hidden`}>
-                    {editorMode === "split" && (
-                      <div className="border-b border-slate-100 bg-[#f8fafc] px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        Aperçu
-                      </div>
-                    )}
-                    <div className="flex-1 overflow-y-auto p-4 md:p-6">
-                      <MarkdownPreview content={selectedFile.contentMarkdown} />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="projects-surface-soft px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        onClick={() => toggleFolder(null)}
+                        type="button"
+                      >
+                        <ChevronRight className={`h-3.5 w-3.5 text-[var(--tsp-text-secondary)] transition-transform ${expandedFolders.has(null) ? "rotate-90" : ""}`} />
+                        <BookOpen className="h-4 w-4 text-[var(--tsp-text-secondary)]" />
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--tsp-text)]">Racine</span>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                          {rootFiles.length}
+                        </span>
+                      </button>
+                      <button
+                        className={`flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--tsp-border)] transition ${addFileTarget === null ? "bg-[var(--tsp-navy)] text-white" : "bg-white text-[var(--tsp-text-secondary)] hover:bg-white"}`}
+                        onClick={() => setAddFileTarget((value) => (value === null ? "none" : null))}
+                        title="Nouvelle note"
+                        type="button"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--tsp-border)] bg-white text-[var(--tsp-text-secondary)] transition hover:bg-white"
+                        onClick={() => openUploadPicker(null)}
+                        title="Importer"
+                        type="button"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                      </button>
                     </div>
+
+                    {expandedFolders.has(null) ? (
+                      <div className="mt-2 space-y-1 border-l border-[var(--tsp-border)] pl-3">
+                        {rootFiles.map((file) => (
+                          <DocFileRow
+                            key={file.id}
+                            file={file}
+                            onDelete={onDeleteFile}
+                            onSelect={handleSelectFile}
+                            selected={selectedFile?.id === file.id}
+                          />
+                        ))}
+                        {renderFileComposer(null)}
+                        {!rootFiles.length && addFileTarget !== null ? (
+                          <p className="py-2 text-[12px] text-[var(--tsp-text-secondary)]">
+                            Aucun document à la racine.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {orderedFolders.map((folder) => {
+                    const folderFiles = files.filter((file) => file.folderId === folder.id);
+                    const isOpen = expandedFolders.has(folder.id);
+
+                    return (
+                      <div key={folder.id} className="projects-surface-soft px-3 py-2.5">
+                        <div className="group flex items-center gap-2">
+                          <button
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                            onClick={() => toggleFolder(folder.id)}
+                            type="button"
+                          >
+                            <ChevronRight className={`h-3.5 w-3.5 text-[var(--tsp-text-secondary)] transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                            {isOpen ? (
+                              <FolderOpen className="h-4 w-4 text-[var(--tsp-amber)]" />
+                            ) : (
+                              <Folder className="h-4 w-4 text-[var(--tsp-amber)]" />
+                            )}
+                            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--tsp-text)]">
+                              {folder.name}
+                            </span>
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                              {folderFiles.length}
+                            </span>
+                          </button>
+                          <div className="flex items-center gap-1.5 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
+                            <button
+                              className={`flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--tsp-border)] transition ${addFileTarget === folder.id ? "bg-[var(--tsp-navy)] text-white" : "bg-white text-[var(--tsp-text-secondary)] hover:bg-white"}`}
+                              onClick={() => {
+                                setAddFileTarget((value) =>
+                                  value === folder.id ? "none" : folder.id
+                                );
+                                setExpandedFolders((prev) => new Set(prev).add(folder.id));
+                              }}
+                              title="Nouvelle note"
+                              type="button"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--tsp-border)] bg-white text-[var(--tsp-text-secondary)] transition hover:bg-white"
+                              onClick={() => openUploadPicker(folder.id)}
+                              title="Importer"
+                              type="button"
+                            >
+                              <Upload className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-[var(--tsp-border)] bg-white text-[var(--tsp-red)] transition hover:bg-[#fef2f2]"
+                              onClick={() => onDeleteFolder(folder.id)}
+                              title="Supprimer le dossier"
+                              type="button"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {isOpen ? (
+                          <div className="mt-2 space-y-1 border-l border-[var(--tsp-border)] pl-3">
+                            {folderFiles.map((file) => (
+                              <DocFileRow
+                                key={file.id}
+                                file={file}
+                                onDelete={onDeleteFile}
+                                onSelect={handleSelectFile}
+                                selected={selectedFile?.id === file.id}
+                              />
+                            ))}
+                            {renderFileComposer(folder.id)}
+                            {!folderFiles.length && addFileTarget !== folder.id ? (
+                              <p className="py-2 text-[12px] text-[var(--tsp-text-secondary)]">
+                                Aucun document dans ce dossier.
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <section className={`${activeMobilePanel === "reader" ? "block" : "hidden"} min-w-0 xl:block`}>
+          {selectedFile ? (
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="space-y-3">
+                <div className="projects-surface p-[14px] sm:p-5">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <button
+                        className="projects-btn-secondary flex h-10 w-10 shrink-0 items-center justify-center xl:hidden"
+                        onClick={() => setMobilePanel("browser")}
+                        type="button"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="projects-label">Document</p>
+                        <p
+                          className="mt-1 break-words font-bold text-[var(--tsp-text)]"
+                          style={{
+                            fontSize: "clamp(1rem, 0.95rem + 0.45vw, 1.2rem)",
+                            letterSpacing: 0,
+                            lineHeight: 1.25,
+                          }}
+                        >
+                          {selectedFile.title}
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${getDocTypeBadgeClass(selectedFile)}`}>
+                            {getDocFileTypeLabel(selectedFile)}
+                          </span>
+                          {selectedFolder ? (
+                            <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                              {selectedFolder.name}
+                            </span>
+                          ) : (
+                            <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                              Racine
+                            </span>
+                          )}
+                          {!isMarkdownDocFile(selectedFile) ? (
+                            <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                              {formatAttachmentSize(selectedFile.size)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="ml-auto flex items-center gap-2">
+                      {canEditSelectedFile ? (
+                        <button
+                          className="projects-btn-secondary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+                          onClick={() => setViewMode((value) => (value === "edit" ? "read" : "edit"))}
+                          type="button"
+                        >
+                          {viewMode === "edit" ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                          <span>{viewMode === "edit" ? "Lecture" : "Modifier"}</span>
+                        </button>
+                      ) : selectedFile.assetPath ? (
+                        <>
+                          <a
+                            className="projects-btn-secondary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+                            href={selectedFile.assetPath}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span>Ouvrir</span>
+                          </a>
+                          <a
+                            className="projects-btn-secondary inline-flex h-10 w-10 items-center justify-center"
+                            download
+                            href={selectedFile.assetPath}
+                            title="Télécharger"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
+                        </>
+                      ) : null}
+                      <button
+                        className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2]"
+                        onClick={() => onDeleteFile(selectedFile.id)}
+                        type="button"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {canEditSelectedFile && viewMode === "edit" ? (
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.95fr)]">
+                    <div className="projects-surface p-[14px] sm:p-5">
+                      <label className="projects-label">Nom du fichier</label>
+                      <input
+                        className="mt-2 h-11 w-full rounded-[10px] border border-[var(--tsp-border)] bg-white px-3 text-[13px] text-[var(--tsp-text)] outline-none"
+                        onChange={(event) =>
+                          onUpdateFile(selectedFile.id, { title: event.target.value })
+                        }
+                        value={selectedFile.title}
+                      />
+
+                      <label className="projects-label mt-5 block">Contenu markdown</label>
+                      <textarea
+                        className="mt-2 min-h-[380px] w-full resize-none rounded-[10px] border border-[var(--tsp-border)] bg-white px-3 py-3 font-mono text-[13px] leading-[1.7] text-[var(--tsp-text)] outline-none"
+                        onChange={(event) =>
+                          onUpdateFile(selectedFile.id, {
+                            contentMarkdown: event.target.value,
+                          })
+                        }
+                        placeholder="Commencez à rédiger votre document..."
+                        value={selectedFile.contentMarkdown}
+                      />
+                    </div>
+
+                    <div className="projects-surface p-[14px] sm:p-5">
+                      <p className="projects-label">Aperçu</p>
+                      <div className="mt-3">
+                        <MarkdownPreview content={selectedFile.contentMarkdown} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="projects-surface p-[14px] sm:p-5">
+                    {isMarkdownDocFile(selectedFile) ? (
+                      <MarkdownPreview content={selectedFile.contentMarkdown} />
+                    ) : (
+                      <UploadedDocPreview file={selectedFile} />
+                    )}
                   </div>
                 )}
               </div>
 
-              <div className="border-t border-slate-100 bg-[#f8fafc] px-3 py-3 md:px-5">
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Résumé
-                    </p>
-                    <p className="mt-2 text-[12px] leading-[1.65] text-slate-600">
-                      {createdAtLabel
-                        ? `Ce document a été créé le ${createdAtLabel}${selectedFile.createdBy ? ` par ${selectedFile.createdBy}` : ""}.`
-                        : "Ce document existe déjà dans l’espace projet."}{" "}
-                      {updatedAtLabel
-                        ? `Sa dernière mise à jour date du ${updatedAtLabel}${selectedFile.updatedBy ? ` par ${selectedFile.updatedBy}` : ""}.`
-                        : ""}{" "}
-                      {selectedFolder
-                        ? `Il est actuellement classé dans le dossier ${selectedFolder.name}.`
-                        : "Il est actuellement classé à la racine."}
-                    </p>
+              <div className="space-y-3">
+                <div className="projects-surface p-[14px] sm:p-5">
+                  <p className="projects-label">Résumé</p>
+                  <p className="mt-3 text-[13px] leading-[1.65] text-[var(--tsp-text-secondary)]">
+                    {isMarkdownDocFile(selectedFile)
+                      ? "Cette note est disponible en lecture par défaut et peut être modifiée manuellement si besoin."
+                      : `Ce document importé est disponible en consultation directe dans l’espace projet au format ${getDocFileTypeLabel(selectedFile)}.`}{" "}
+                    {selectedFolder
+                      ? `Il est classé dans le dossier ${selectedFolder.name}.`
+                      : "Il est classé à la racine."}{" "}
+                    {createdAtLabel
+                      ? `Créé le ${createdAtLabel}${selectedFile.createdBy ? ` par ${selectedFile.createdBy}` : ""}.`
+                      : ""}{" "}
+                    {updatedAtLabel
+                      ? `Dernière mise à jour le ${updatedAtLabel}${selectedFile.updatedBy ? ` par ${selectedFile.updatedBy}` : ""}.`
+                      : ""}
+                  </p>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+                    <DocMetaItem label="Type" value={getDocFileSummary(selectedFile)} />
+                    <DocMetaItem label="Emplacement" value={selectedFolder?.name || "Racine"} />
+                    {selectedFile.createdBy ? (
+                      <DocMetaItem
+                        label="Créé par"
+                        value={createdAtLabel ? `${selectedFile.createdBy} · ${createdAtLabel}` : selectedFile.createdBy}
+                      />
+                    ) : null}
+                    {selectedFile.updatedBy ? (
+                      <DocMetaItem
+                        label="Mis à jour"
+                        value={updatedAtLabel ? `${selectedFile.updatedBy} · ${updatedAtLabel}` : selectedFile.updatedBy}
+                      />
+                    ) : null}
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                        Activité récente
-                      </p>
-                      {selectedFileActivityLogs.length ? (
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                          {selectedFileActivityLogs.length}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      {selectedFileActivityLogs.length ? (
-                        selectedFileActivityLogs.map((log) => (
-                          <ActivityLogItem key={log.id} log={log} />
-                        ))
-                      ) : (
-                        <p className="text-[12px] text-slate-400">
-                          Aucune activité enregistrée pour ce document.
-                        </p>
-                      )}
-                    </div>
+                </div>
+
+                <div className="projects-surface p-[14px] sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="projects-label">Activité récente</p>
+                    {selectedFileActivityLogs.length ? (
+                      <span className="rounded-full bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[10px] font-semibold text-[var(--tsp-text-secondary)]">
+                        {selectedFileActivityLogs.length}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {selectedFileActivityLogs.length ? (
+                      selectedFileActivityLogs.map((log) => (
+                        <ActivityLogItem key={log.id} log={log} />
+                      ))
+                    ) : (
+                      <div className="projects-surface-soft px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                        Aucune activité enregistrée pour ce document.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
-          </>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50">
-              <FileText className="h-7 w-7 text-slate-300" />
+          ) : (
+            <div className="projects-surface flex min-h-[360px] flex-col items-center justify-center gap-4 p-8 text-center">
+              <div className="projects-surface-soft flex h-16 w-16 items-center justify-center rounded-[10px]">
+                <FileText className="h-7 w-7 text-[var(--tsp-text-secondary)]" />
+              </div>
+              <div>
+                <p className="text-[15px] font-semibold text-[var(--tsp-text)]">Aucun document sélectionné</p>
+                <p className="mt-1 text-[12px] text-[var(--tsp-text-secondary)]">
+                  Ouvrez un fichier, créez une note markdown ou importez un document.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <button
+                  className="projects-btn-secondary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+                  onClick={() => setAddFileTarget(null)}
+                  type="button"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Nouvelle note</span>
+                </button>
+                <button
+                  className="projects-btn-primary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+                  onClick={() => openUploadPicker(null)}
+                  type="button"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>Importer des docs</span>
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-600">Aucun fichier ouvert</p>
-              <p className="mt-1 text-xs text-slate-400">Sélectionnez un fichier dans l&apos;explorateur ou créez-en un nouveau.</p>
-            </div>
-          </div>
-        )}
+          )}
+        </section>
       </div>
     </div>
   );
@@ -2139,49 +2508,213 @@ function DocFileRow({ file, selected, onSelect, onDelete }: {
   onSelect: (id: string) => void; onDelete: (id: string) => void;
 }) {
   return (
-    <div className="group flex items-center gap-0">
-      <button onClick={() => onSelect(file.id)} type="button"
-        className={`flex flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition ${selected ? "bg-white font-semibold text-slate-800 shadow-sm ring-1 ring-slate-200/80" : "text-slate-500 hover:bg-slate-200/50 hover:text-slate-700"}`}>
-        <FileText className={`h-3.5 w-3.5 shrink-0 ${selected ? "text-[#d9140e]" : "text-slate-300 group-hover:text-slate-400"}`} />
-        <span className="truncate">{file.title}</span>
+    <div className="group flex items-center gap-2">
+      <button
+        className={`flex min-w-0 flex-1 items-center gap-3 rounded-[10px] border px-2.5 py-2.5 text-left transition ${selected ? "border-[var(--tsp-border)] bg-white" : "border-transparent bg-transparent hover:bg-white/75"}`}
+        onClick={() => onSelect(file.id)}
+        type="button"
+      >
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${selected ? "bg-[var(--tsp-navy)] text-white" : "bg-white text-[var(--tsp-text-secondary)]"}`}>
+          {file.sourceType === "upload" ? (
+            <Paperclip className="h-4 w-4" />
+          ) : (
+            <FileText className="h-4 w-4" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className={`truncate text-[13px] font-semibold ${selected ? "text-[var(--tsp-text)]" : "text-[var(--tsp-text)]"}`}>
+              {file.title}
+            </p>
+            <span className={`hidden rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:inline-flex ${getDocTypeBadgeClass(file)}`}>
+              {getDocFileTypeLabel(file)}
+            </span>
+          </div>
+          <p className="mt-0.5 text-[11px] text-[var(--tsp-text-secondary)]">
+            {getDocFileSummary(file)}
+          </p>
+        </div>
       </button>
-      <button onClick={() => onDelete(file.id)} type="button"
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-300 opacity-100 transition hover:bg-red-50 hover:text-red-500 md:opacity-0 md:group-hover:opacity-100">
-        <Trash2 className="h-3 w-3" />
+      <button
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[var(--tsp-border)] text-[var(--tsp-red)] opacity-100 transition hover:bg-[#fef2f2] md:opacity-0 md:group-hover:opacity-100"
+        onClick={() => onDelete(file.id)}
+        type="button"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
       </button>
     </div>
   );
 }
 
+function DocMetaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="projects-surface-soft px-3 py-3">
+      <p className="projects-label">{label}</p>
+      <p className="mt-1 text-[13px] leading-[1.55] text-[var(--tsp-text)]">{value}</p>
+    </div>
+  );
+}
+
+function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
+  if (!file.assetPath) {
+    return (
+      <div className="projects-surface-soft px-4 py-5 text-[13px] text-[var(--tsp-text-secondary)]">
+        Le fichier n’est plus disponible à l’affichage.
+      </div>
+    );
+  }
+
+  if (isImageDocFile(file)) {
+    return (
+      <div className="space-y-3">
+        <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-3">
+          <div>
+            <p className="text-[14px] font-semibold text-[var(--tsp-text)]">{file.title}</p>
+            <p className="mt-0.5 text-[12px] text-[var(--tsp-text-secondary)]">
+              Image importée · {formatAttachmentSize(file.size)}
+            </p>
+          </div>
+          <a
+            className="projects-btn-secondary inline-flex h-9 items-center gap-2 px-3 text-[12px] font-semibold"
+            href={file.assetPath}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Eye className="h-4 w-4" />
+            <span>Ouvrir</span>
+          </a>
+        </div>
+        <div className="relative overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
+          <div className="relative aspect-[4/3] w-full">
+            <Image
+              alt={file.title}
+              className="object-contain"
+              fill
+              src={file.assetPath}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPdfDocFile(file)) {
+    return (
+      <div className="space-y-3">
+        <div className="projects-surface-soft flex flex-wrap items-center justify-between gap-3 px-3 py-3">
+          <div>
+            <p className="text-[14px] font-semibold text-[var(--tsp-text)]">{file.title}</p>
+            <p className="mt-0.5 text-[12px] text-[var(--tsp-text-secondary)]">
+              PDF · {formatAttachmentSize(file.size)}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              className="projects-btn-secondary inline-flex h-9 items-center gap-2 px-3 text-[12px] font-semibold"
+              href={file.assetPath}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Eye className="h-4 w-4" />
+              <span>Ouvrir</span>
+            </a>
+            <a
+              className="projects-btn-secondary inline-flex h-9 w-9 items-center justify-center"
+              download
+              href={file.assetPath}
+              title="Télécharger"
+            >
+              <Download className="h-4 w-4" />
+            </a>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
+          <iframe
+            className="h-[62vh] min-h-[420px] w-full"
+            src={`${file.assetPath}#toolbar=0`}
+            title={file.title}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="projects-surface-soft px-4 py-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] bg-white text-[var(--tsp-text-secondary)]">
+          <FileText className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[14px] font-semibold text-[var(--tsp-text)]">{file.title}</p>
+          <p className="mt-0.5 text-[12px] text-[var(--tsp-text-secondary)]">
+            {getDocFileTypeLabel(file)} · {formatAttachmentSize(file.size)}
+          </p>
+        </div>
+      </div>
+      <p className="mt-3 text-[13px] leading-[1.6] text-[var(--tsp-text-secondary)]">
+        Ce document est stocké dans l’espace projet. Ouvrez-le dans un nouvel onglet ou téléchargez-le pour le consulter.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <a
+          className="projects-btn-primary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+          href={file.assetPath}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Eye className="h-4 w-4" />
+          <span>Ouvrir le document</span>
+        </a>
+        <a
+          className="projects-btn-secondary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+          download
+          href={file.assetPath}
+        >
+          <Download className="h-4 w-4" />
+          <span>Télécharger</span>
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function MarkdownPreview({ content }: { content: string }) {
+  if (!content.trim()) {
+    return (
+      <div className="projects-surface-soft px-4 py-5 text-[13px] text-[var(--tsp-text-secondary)]">
+        Ce document est vide pour le moment.
+      </div>
+    );
+  }
+
   const lines = content.split("\n");
   return (
-    <div className="prose-like space-y-1 text-sm leading-7 text-slate-600">
+    <div className="space-y-1 text-[13px] leading-[1.75] text-[var(--tsp-text-secondary)]">
       {lines.map((line, i) => {
         if (line.startsWith("# "))
-          return <h1 key={i} className="mb-3 mt-6 border-b border-slate-100 pb-2 text-2xl font-bold tracking-tight text-slate-900 first:mt-0">{line.slice(2)}</h1>;
+          return <h1 key={i} className="mb-3 mt-6 border-b border-[var(--tsp-border)] pb-2 text-[22px] font-bold tracking-tight text-[var(--tsp-text)] first:mt-0">{line.slice(2)}</h1>;
         if (line.startsWith("## "))
-          return <h2 key={i} className="mb-2 mt-5 text-xl font-bold text-slate-800">{line.slice(3)}</h2>;
+          return <h2 key={i} className="mb-2 mt-5 text-[18px] font-bold text-[var(--tsp-text)]">{line.slice(3)}</h2>;
         if (line.startsWith("### "))
-          return <h3 key={i} className="mb-1.5 mt-4 text-base font-semibold text-slate-700">{line.slice(4)}</h3>;
+          return <h3 key={i} className="mb-1.5 mt-4 text-[15px] font-semibold text-[var(--tsp-text)]">{line.slice(4)}</h3>;
         if (line.startsWith("**") && line.endsWith("**"))
-          return <p key={i} className="font-semibold text-slate-800">{line.slice(2, -2)}</p>;
+          return <p key={i} className="font-semibold text-[var(--tsp-text)]">{line.slice(2, -2)}</p>;
         if (line.startsWith("- "))
           return (
             <div key={i} className="flex items-start gap-2.5">
-              <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#d9140e]" />
-              <span className="text-slate-600">{line.slice(2)}</span>
+              <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--tsp-red)]" />
+              <span className="text-[var(--tsp-text-secondary)]">{line.slice(2)}</span>
             </div>
           );
         if (line.match(/^\d+\. /))
-          return <div key={i} className="flex gap-2.5 text-slate-600"><span className="shrink-0 font-medium text-slate-400">{line.match(/^(\d+)\./)?.[1]}.</span><span>{line.replace(/^\d+\. /, "")}</span></div>;
+          return <div key={i} className="flex gap-2.5 text-[var(--tsp-text-secondary)]"><span className="shrink-0 font-medium text-[var(--tsp-text-secondary)]">{line.match(/^(\d+)\./)?.[1]}.</span><span>{line.replace(/^\d+\. /, "")}</span></div>;
         if (line.startsWith("> "))
-          return <blockquote key={i} className="border-l-2 border-[#d9140e]/30 pl-4 italic text-slate-500">{line.slice(2)}</blockquote>;
+          return <blockquote key={i} className="border-l-2 border-[var(--tsp-red)]/30 pl-4 italic text-[var(--tsp-text-secondary)]">{line.slice(2)}</blockquote>;
         if (line.startsWith("---"))
-          return <hr key={i} className="border-slate-200" />;
+          return <hr key={i} className="border-[var(--tsp-border)]" />;
         if (!line.trim())
           return <div key={i} className="h-2" />;
-        return <p key={i} className="whitespace-pre-wrap text-slate-600">{line}</p>;
+        return <p key={i} className="whitespace-pre-wrap text-[var(--tsp-text-secondary)]">{line}</p>;
       })}
     </div>
   );

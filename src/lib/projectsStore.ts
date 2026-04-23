@@ -8,6 +8,7 @@ import {
   INTERVENTION_STATUSES,
   ManagedProject,
   ManagedTask,
+  PROJECT_DOC_SOURCE_TYPES,
   PROJECT_HEALTH_STATUSES,
   PROJECT_STATUSES,
   PROJECT_USER_ROLES,
@@ -496,6 +497,10 @@ function normalizeDocFile(file: Partial<ProjectDocFile>): ProjectDocFile | null 
     return null;
   }
 
+  const sourceType = PROJECT_DOC_SOURCE_TYPES.includes(file.sourceType ?? "markdown")
+    ? file.sourceType ?? "markdown"
+    : "markdown";
+
   return {
     id:
       typeof file.id === "string" && file.id.trim()
@@ -507,8 +512,17 @@ function normalizeDocFile(file: Partial<ProjectDocFile>): ProjectDocFile | null 
         ? file.folderId.trim()
         : null,
     title: file.title.trim(),
+    sourceType,
     contentMarkdown:
       typeof file.contentMarkdown === "string" ? file.contentMarkdown : "",
+    assetPath: typeof file.assetPath === "string" ? file.assetPath.trim() : "",
+    mimeType:
+      typeof file.mimeType === "string" && file.mimeType.trim()
+        ? file.mimeType.trim()
+        : sourceType === "markdown"
+          ? "text/markdown"
+          : "",
+    size: Number.isFinite(Number(file.size)) ? Math.max(0, Number(file.size)) : 0,
     createdAt:
       typeof file.createdAt === "string" && file.createdAt
         ? file.createdAt
@@ -1302,6 +1316,11 @@ function getDocEditableChanges(current: ProjectDocFile, next: ProjectDocFile) {
   return {
     contentChanged: current.contentMarkdown !== next.contentMarkdown,
     folderChanged: current.folderId !== next.folderId,
+    metadataChanged:
+      current.sourceType !== next.sourceType ||
+      current.assetPath !== next.assetPath ||
+      current.mimeType !== next.mimeType ||
+      current.size !== next.size,
     titleChanged: current.title !== next.title,
   };
 }
@@ -1376,11 +1395,12 @@ function applyDocAuditTrail(
       return createdFile;
     }
 
-    const { contentChanged, folderChanged, titleChanged } = getDocEditableChanges(
+    const { contentChanged, folderChanged, metadataChanged, titleChanged } = getDocEditableChanges(
       current,
       file
     );
-    const changed = contentChanged || folderChanged || titleChanged;
+    const changed =
+      contentChanged || folderChanged || metadataChanged || titleChanged;
 
     const nextFile: ProjectDocFile = {
       ...file,
@@ -1408,7 +1428,7 @@ function applyDocAuditTrail(
     }
 
     if (
-      (contentChanged || titleChanged) &&
+      (contentChanged || metadataChanged || titleChanged) &&
       !hasRecentDocUpdateLog(
         [...appendedLogs, ...incomingData.activityLogs],
         actor.id,
@@ -1422,12 +1442,13 @@ function applyDocAuditTrail(
           entityId: nextFile.id,
           entityType: "doc",
           message:
-            titleChanged && !contentChanged
+            titleChanged && !contentChanged && !metadataChanged
               ? `${actor.name} a renommé le document "${current.title}" en "${nextFile.title}"`
               : `${actor.name} a mis à jour le document "${nextFile.title}"`,
           meta: {
             previousTitle: current.title,
             title: nextFile.title,
+            sourceType: nextFile.sourceType,
           },
           projectId: nextFile.projectId,
         })
@@ -1783,7 +1804,11 @@ async function ensureProjectsSchema() {
         project_id VARCHAR(120) NOT NULL,
         folder_id VARCHAR(120) NULL,
         title VARCHAR(190) NOT NULL,
+        source_type VARCHAR(30) NOT NULL DEFAULT 'markdown',
         content_markdown MEDIUMTEXT NULL,
+        asset_path VARCHAR(255) NULL,
+        mime_type VARCHAR(190) NULL,
+        size_bytes BIGINT NOT NULL DEFAULT 0,
         created_by VARCHAR(190) NULL,
         updated_by VARCHAR(190) NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1817,6 +1842,34 @@ async function ensureProjectsSchema() {
       await pool.query(`
         ALTER TABLE project_doc_files
           ADD COLUMN updated_by VARCHAR(190) NULL AFTER created_by
+      `);
+    }
+
+    if (!docFileColumns.has("source_type")) {
+      await pool.query(`
+        ALTER TABLE project_doc_files
+          ADD COLUMN source_type VARCHAR(30) NOT NULL DEFAULT 'markdown' AFTER title
+      `);
+    }
+
+    if (!docFileColumns.has("asset_path")) {
+      await pool.query(`
+        ALTER TABLE project_doc_files
+          ADD COLUMN asset_path VARCHAR(255) NULL AFTER content_markdown
+      `);
+    }
+
+    if (!docFileColumns.has("mime_type")) {
+      await pool.query(`
+        ALTER TABLE project_doc_files
+          ADD COLUMN mime_type VARCHAR(190) NULL AFTER asset_path
+      `);
+    }
+
+    if (!docFileColumns.has("size_bytes")) {
+      await pool.query(`
+        ALTER TABLE project_doc_files
+          ADD COLUMN size_bytes BIGINT NOT NULL DEFAULT 0 AFTER mime_type
       `);
     }
 
@@ -2212,14 +2265,18 @@ async function saveProjectsDataWithoutSchema(
   for (const file of data.docFiles) {
     await queryable.execute(
       `INSERT INTO project_doc_files
-        (id, project_id, folder_id, title, content_markdown, created_by, updated_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, folder_id, title, source_type, content_markdown, asset_path, mime_type, size_bytes, created_by, updated_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         file.id,
         file.projectId,
         file.folderId,
         file.title,
+        file.sourceType,
         file.contentMarkdown,
+        file.assetPath || null,
+        file.mimeType || null,
+        file.size,
         file.createdBy || null,
         file.updatedBy || null,
         toNullableDateTime(file.createdAt),
@@ -2381,7 +2438,11 @@ export async function getProjectsData(): Promise<ProjectsData> {
       project_id AS projectId,
       folder_id AS folderId,
       title,
+      source_type AS sourceType,
       content_markdown AS contentMarkdown,
+      asset_path AS assetPath,
+      mime_type AS mimeType,
+      size_bytes AS size,
       created_at AS createdAt,
       created_by AS createdBy,
       updated_at AS updatedAt,
@@ -2538,7 +2599,11 @@ export async function getProjectsData(): Promise<ProjectsData> {
       projectId: String(row.projectId),
       folderId: row.folderId ? String(row.folderId) : null,
       title: String(row.title),
+      sourceType: row.sourceType === "upload" ? "upload" : "markdown",
       contentMarkdown: String(row.contentMarkdown ?? ""),
+      assetPath: String(row.assetPath ?? ""),
+      mimeType: String(row.mimeType ?? ""),
+      size: Number.isFinite(Number(row.size)) ? Math.max(0, Number(row.size)) : 0,
       createdAt:
         typeof row.createdAt === "string"
           ? row.createdAt

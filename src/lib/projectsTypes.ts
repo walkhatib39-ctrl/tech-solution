@@ -36,6 +36,7 @@ export const INTERVENTION_STATUSES = [
 ] as const;
 
 export const PROJECT_USER_ROLES = ["super_admin", "member"] as const;
+export const PROJECT_DOC_SOURCE_TYPES = ["markdown", "upload"] as const;
 
 export type ProjectType = (typeof PROJECT_TYPES)[number];
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
@@ -45,6 +46,7 @@ export type ProjectHealthStatus = (typeof PROJECT_HEALTH_STATUSES)[number];
 export type TrackingStatus = (typeof TRACKING_STATUSES)[number];
 export type InterventionStatus = (typeof INTERVENTION_STATUSES)[number];
 export type ProjectUserRole = (typeof PROJECT_USER_ROLES)[number];
+export type ProjectDocSourceType = (typeof PROJECT_DOC_SOURCE_TYPES)[number];
 
 export interface ManagedProject {
   id: string;
@@ -108,7 +110,11 @@ export interface ProjectDocFile {
   projectId: string;
   folderId: string | null;
   title: string;
+  sourceType: ProjectDocSourceType;
   contentMarkdown: string;
+  assetPath: string;
+  mimeType: string;
+  size: number;
   createdAt: string;
   createdBy: string;
   updatedAt: string;
