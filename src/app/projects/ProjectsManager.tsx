@@ -416,6 +416,9 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [previewInterventionId, setPreviewInterventionId] = useState("");
   const [showAddProject, setShowAddProject] = useState(false);
   const [projectForm, setProjectForm] = useState<ProjectFormState>({ name: "", color: "#1e3a5f" });
+  const [isProjectRenameOpen, setIsProjectRenameOpen] = useState(false);
+  const [projectRenameDraft, setProjectRenameDraft] = useState("");
+  const [isProjectDeleteConfirmOpen, setIsProjectDeleteConfirmOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSuperAdmin = currentUser.role === "super_admin";
 
@@ -597,6 +600,12 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     setPreviewInterventionId("");
   }, [selectedProjectId]);
 
+  useEffect(() => {
+    setIsProjectRenameOpen(false);
+    setProjectRenameDraft(selectedProject?.name ?? "");
+    setIsProjectDeleteConfirmOpen(false);
+  }, [selectedProject?.id, selectedProject?.name]);
+
   const stats = useMemo(() => {
     const total = projectTasks.length;
     const done = projectTasks.filter((t) => t.status === "Terminé").length;
@@ -632,6 +641,56 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     setIsSidebarOpen(false);
     setProjectForm({ name: "", color: "#1e3a5f" });
     setShowAddProject(false);
+  };
+
+  const handleRenameProject = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!isSuperAdmin || !selectedProject || !projectRenameDraft.trim()) return;
+
+    const nextName = projectRenameDraft.trim();
+    updateData((c) => ({
+      ...c,
+      projects: c.projects.map((project) =>
+        project.id === selectedProject.id
+          ? { ...project, name: nextName }
+          : project
+      ),
+    }));
+    setIsProjectRenameOpen(false);
+  };
+
+  const handleDeleteProject = () => {
+    if (!isSuperAdmin || !selectedProject) return;
+
+    const projectId = selectedProject.id;
+    const nextSelectedProjectId =
+      data.projects.find((project) => project.id !== projectId)?.id ?? "";
+
+    setSelectedProjectId(nextSelectedProjectId);
+    setActiveTab("Pilotage");
+    setEditingTask(null);
+    setIsTaskEditorOpen(false);
+    setPreviewTaskId("");
+    setEditingIntervention(null);
+    setIsInterventionEditorOpen(false);
+    setPreviewInterventionId("");
+    setSelectedDocFileId("");
+    setIsProjectRenameOpen(false);
+    setIsProjectDeleteConfirmOpen(false);
+
+    updateData((c) => ({
+      ...c,
+      projects: c.projects.filter((project) => project.id !== projectId),
+      taskSections: c.taskSections.filter((section) => section.projectId !== projectId),
+      tasks: c.tasks.filter((task) => task.projectId !== projectId),
+      docFolders: c.docFolders.filter((folder) => folder.projectId !== projectId),
+      docFiles: c.docFiles.filter((file) => file.projectId !== projectId),
+      trackingFields: c.trackingFields.filter((field) => field.projectId !== projectId),
+      updates: c.updates.filter((update) => update.projectId !== projectId),
+      interventions: c.interventions.filter((intervention) => intervention.projectId !== projectId),
+      projectAccess: c.projectAccess.filter((access) => access.projectId !== projectId),
+      activityLogs: c.activityLogs.filter((log) => log.projectId !== projectId),
+    }));
   };
 
   const handleSaveTask = (draft: Omit<ManagedTask, "id">, taskId?: string) => {
@@ -1164,10 +1223,37 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 sm:hidden">
+                      <div className="flex items-center gap-2">
+                        {isSuperAdmin && (
+                          <>
+                            <button
+                              aria-label="Renommer le projet"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white transition hover:bg-white/12"
+                              onClick={() => {
+                                setProjectRenameDraft(selectedProject.name);
+                                setIsProjectRenameOpen((value) => !value);
+                                setIsProjectDeleteConfirmOpen(false);
+                              }}
+                              type="button"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              aria-label="Supprimer le projet"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white transition hover:border-red-200/30 hover:bg-red-500/12 hover:text-red-100"
+                              onClick={() => {
+                                setIsProjectDeleteConfirmOpen((value) => !value);
+                                setIsProjectRenameOpen(false);
+                              }}
+                              type="button"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                         <button
                           aria-label="Ouvrir le menu"
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white sm:hidden"
                           onClick={() => setIsSidebarOpen(true)}
                           type="button"
                         >
@@ -1175,6 +1261,66 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                         </button>
                       </div>
                     </div>
+
+                    {isSuperAdmin && isProjectRenameOpen && (
+                      <form
+                        className="mt-3 flex flex-col gap-2 rounded-[10px] border border-white/10 bg-white/[0.06] p-3 sm:max-w-[420px] sm:flex-row sm:items-center"
+                        onSubmit={handleRenameProject}
+                      >
+                        <input
+                          className="h-10 min-w-0 flex-1 rounded-[10px] border border-white/10 bg-white text-[13px] text-[var(--tsp-text)] placeholder:text-[var(--tsp-text-secondary)]"
+                          onChange={(e) => setProjectRenameDraft(e.target.value)}
+                          placeholder="Nom du projet"
+                          value={projectRenameDraft}
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="projects-btn-secondary inline-flex h-10 items-center justify-center px-3 text-[12px] font-semibold"
+                            onClick={() => {
+                              setIsProjectRenameOpen(false);
+                              setProjectRenameDraft(selectedProject.name);
+                            }}
+                            type="button"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            className="projects-btn-primary inline-flex h-10 items-center justify-center px-3 text-[12px] font-semibold"
+                            disabled={!projectRenameDraft.trim()}
+                            type="submit"
+                          >
+                            Enregistrer
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {isSuperAdmin && isProjectDeleteConfirmOpen && (
+                      <div className="mt-3 max-w-[520px] rounded-[10px] border border-red-200/20 bg-red-500/10 p-3">
+                        <p className="text-[13px] font-semibold text-white">
+                          Supprimer ce projet ?
+                        </p>
+                        <p className="mt-1 text-[12px] text-white/[0.7]">
+                          Toutes les tâches, documents, interventions, accès et activités liés à ce projet seront supprimés.
+                        </p>
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            className="projects-btn-secondary inline-flex h-10 items-center justify-center px-3 text-[12px] font-semibold"
+                            onClick={() => setIsProjectDeleteConfirmOpen(false)}
+                            type="button"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            className="inline-flex h-10 items-center justify-center rounded-[10px] border border-red-200/30 bg-[#dc2626] px-3 text-[12px] font-semibold text-white transition hover:bg-[#b91c1c]"
+                            onClick={handleDeleteProject}
+                            type="button"
+                          >
+                            Supprimer définitivement
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {/* Stats row */}
                   {!shouldHideProjectStats && (
