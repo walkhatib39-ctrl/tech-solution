@@ -1275,7 +1275,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                   />
                 )
               )}
-              {activeTab === "Docs"     && <DocsTab activityLogs={projectActivityLogs} files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} onUploadFiles={handleUploadDocFiles} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
+              {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} onUploadFiles={handleUploadDocFiles} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
               {activeTab === "Interventions" && (
                 isInterventionEditorOpen ? (
                   <InterventionEditorPage
@@ -1849,8 +1849,7 @@ function getDocFileSummary(file: ProjectDocFile) {
   return `${typeLabel} · ${formatAttachmentSize(file.size)}`;
 }
 
-function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDeleteFile, onDeleteFolder, onSelectFile, onUpdateFile, onUploadFiles, projectId, selectedFile }: {
-  activityLogs: ProjectActivityLog[]; 
+function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDeleteFolder, onSelectFile, onUpdateFile, onUploadFiles, projectId, selectedFile }: {
   files: ProjectDocFile[]; folders: ProjectDocFolder[];
   onAddFile: (pid: string, fid: string | null, title: string) => void;
   onAddFolder: (pid: string, name: string) => void;
@@ -1919,15 +1918,6 @@ function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDelet
     ? (selectedFile.folderId ? folders.find((f) => f.id === selectedFile.folderId) : null)
     : null;
   const activeMobilePanel = selectedFile ? mobilePanel : "browser";
-  const selectedFileActivityLogs = useMemo(
-    () =>
-      !selectedFile
-        ? []
-        : activityLogs
-            .filter((log) => log.entityType === "doc" && log.entityId === selectedFile.id)
-            .slice(0, 6),
-    [activityLogs, selectedFile]
-  );
   const createdAtLabel = selectedFile ? formatProjectDateTime(selectedFile.createdAt) : "";
   const updatedAtLabel = selectedFile ? formatProjectDateTime(selectedFile.updatedAt) : "";
   const canEditSelectedFile = Boolean(selectedFile && isMarkdownDocFile(selectedFile));
@@ -2277,74 +2267,48 @@ function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDelet
 
         <section className={`${activeMobilePanel === "reader" ? "block" : "hidden"} min-w-0 xl:block`}>
           {selectedFile ? (
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_280px]">
               <div className="space-y-3">
                 <div className="projects-surface p-[14px] sm:p-5">
-                  <div className="flex flex-wrap items-start gap-3">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
                       <button
-                        className="projects-btn-secondary flex h-10 w-10 shrink-0 items-center justify-center xl:hidden"
+                        className="projects-btn-secondary flex h-9 w-9 shrink-0 items-center justify-center"
                         onClick={() => setMobilePanel("browser")}
                         type="button"
                       >
                         <ArrowLeft className="h-4 w-4" />
                       </button>
-                      <div className="min-w-0 flex-1">
-                        <p className="projects-label">Document</p>
-                        <p
-                          className="mt-1 break-words font-bold text-[var(--tsp-text)]"
-                          style={{
-                            fontSize: "clamp(1rem, 0.95rem + 0.45vw, 1.2rem)",
-                            letterSpacing: 0,
-                            lineHeight: 1.25,
-                          }}
-                        >
-                          {selectedFile.title}
-                        </p>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${getDocTypeBadgeClass(selectedFile)}`}>
-                            {getDocFileTypeLabel(selectedFile)}
-                          </span>
-                          {selectedFolder ? (
-                            <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
-                              {selectedFolder.name}
-                            </span>
-                          ) : (
-                            <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
-                              Racine
-                            </span>
-                          )}
-                          {!isMarkdownDocFile(selectedFile) ? (
-                            <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
-                              {formatAttachmentSize(selectedFile.size)}
-                            </span>
-                          ) : null}
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-1 text-[11px] font-medium text-[var(--tsp-text-secondary)]">
+                          <span className="truncate">Docs</span>
+                          <ChevronRight className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{selectedFolder?.name || "Racine"}</span>
                         </div>
                       </div>
                     </div>
-                    <div className="ml-auto flex items-center gap-2">
+                    <div className="ml-auto flex items-center gap-1.5">
                       {canEditSelectedFile ? (
                         <button
-                          className="projects-btn-secondary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+                          className="projects-btn-secondary inline-flex h-9 w-9 items-center justify-center"
                           onClick={() => setViewMode((value) => (value === "edit" ? "read" : "edit"))}
                           type="button"
                         >
                           {viewMode === "edit" ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-                          <span>{viewMode === "edit" ? "Lecture" : "Modifier"}</span>
                         </button>
                       ) : selectedFile.assetPath ? (
                         <>
                           <a
-                            className="projects-btn-secondary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+                            className="projects-btn-secondary inline-flex h-9 w-9 items-center justify-center"
                             href={selectedFile.assetPath}
                             rel="noreferrer"
+                            title="Ouvrir"
                             target="_blank"
                           >
                             <Eye className="h-4 w-4" />
-                            <span>Ouvrir</span>
                           </a>
                           <a
-                            className="projects-btn-secondary inline-flex h-10 w-10 items-center justify-center"
+                            className="projects-btn-secondary inline-flex h-9 w-9 items-center justify-center"
                             download
                             href={selectedFile.assetPath}
                             title="Télécharger"
@@ -2354,7 +2318,7 @@ function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDelet
                         </>
                       ) : null}
                       <button
-                        className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2]"
+                        className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2]"
                         onClick={() => onDeleteFile(selectedFile.id)}
                         type="button"
                       >
@@ -2362,6 +2326,23 @@ function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDelet
                       </button>
                     </div>
                   </div>
+
+                  <p
+                    className="mt-3 w-full break-words font-semibold text-[var(--tsp-text)]"
+                    style={{
+                      fontSize: "clamp(0.98rem, 0.94rem + 0.3vw, 1.12rem)",
+                      letterSpacing: 0,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {selectedFile.title}
+                  </p>
+
+                  {!isMarkdownDocFile(selectedFile) ? (
+                    <p className="mt-2 text-[12px] text-[var(--tsp-text-secondary)]">
+                      {formatAttachmentSize(selectedFile.size)}
+                    </p>
+                  ) : null}
                 </div>
 
                 {canEditSelectedFile && viewMode === "edit" ? (
@@ -2425,44 +2406,22 @@ function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDelet
                       : ""}
                   </p>
 
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-                    <DocMetaItem label="Type" value={getDocFileSummary(selectedFile)} />
-                    <DocMetaItem label="Emplacement" value={selectedFolder?.name || "Racine"} />
-                    {selectedFile.createdBy ? (
-                      <DocMetaItem
-                        label="Créé par"
-                        value={createdAtLabel ? `${selectedFile.createdBy} · ${createdAtLabel}` : selectedFile.createdBy}
-                      />
-                    ) : null}
-                    {selectedFile.updatedBy ? (
-                      <DocMetaItem
-                        label="Mis à jour"
-                        value={updatedAtLabel ? `${selectedFile.updatedBy} · ${updatedAtLabel}` : selectedFile.updatedBy}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="projects-surface p-[14px] sm:p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="projects-label">Activité récente</p>
-                    {selectedFileActivityLogs.length ? (
-                      <span className="rounded-full bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[10px] font-semibold text-[var(--tsp-text-secondary)]">
-                        {selectedFileActivityLogs.length}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-3 space-y-2">
-                    {selectedFileActivityLogs.length ? (
-                      selectedFileActivityLogs.map((log) => (
-                        <ActivityLogItem key={log.id} log={log} />
-                      ))
-                    ) : (
-                      <div className="projects-surface-soft px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
-                        Aucune activité enregistrée pour ce document.
-                      </div>
-                    )}
-                  </div>
+                  {(selectedFile.createdBy || selectedFile.updatedBy) ? (
+                    <div className="projects-surface-soft mt-4 px-3 py-3.5">
+                      {selectedFile.createdBy ? (
+                        <p className="text-[13px] leading-[1.65] text-[var(--tsp-text-secondary)]">
+                          Créé par <span className="font-semibold text-[var(--tsp-text)]">{selectedFile.createdBy}</span>
+                          {createdAtLabel ? ` le ${createdAtLabel}` : ""}.
+                        </p>
+                      ) : null}
+                      {selectedFile.updatedBy ? (
+                        <p className="mt-1 text-[13px] leading-[1.65] text-[var(--tsp-text-secondary)]">
+                          Dernière modification par <span className="font-semibold text-[var(--tsp-text)]">{selectedFile.updatedBy}</span>
+                          {updatedAtLabel ? ` le ${updatedAtLabel}` : ""}.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -2542,15 +2501,6 @@ function DocFileRow({ file, selected, onSelect, onDelete }: {
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
-    </div>
-  );
-}
-
-function DocMetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="projects-surface-soft px-3 py-3">
-      <p className="projects-label">{label}</p>
-      <p className="mt-1 text-[13px] leading-[1.55] text-[var(--tsp-text)]">{value}</p>
     </div>
   );
 }
@@ -2692,11 +2642,11 @@ function MarkdownPreview({ content }: { content: string }) {
     <div className="space-y-1 text-[13px] leading-[1.75] text-[var(--tsp-text-secondary)]">
       {lines.map((line, i) => {
         if (line.startsWith("# "))
-          return <h1 key={i} className="mb-3 mt-6 border-b border-[var(--tsp-border)] pb-2 text-[22px] font-bold tracking-tight text-[var(--tsp-text)] first:mt-0">{line.slice(2)}</h1>;
+          return <h1 key={i} className="mb-3 mt-6 border-b border-[var(--tsp-border)] pb-2 text-[18px] font-bold tracking-tight text-[var(--tsp-text)] first:mt-0 sm:text-[20px]">{line.slice(2)}</h1>;
         if (line.startsWith("## "))
-          return <h2 key={i} className="mb-2 mt-5 text-[18px] font-bold text-[var(--tsp-text)]">{line.slice(3)}</h2>;
+          return <h2 key={i} className="mb-2 mt-5 text-[15px] font-bold text-[var(--tsp-text)] sm:text-[17px]">{line.slice(3)}</h2>;
         if (line.startsWith("### "))
-          return <h3 key={i} className="mb-1.5 mt-4 text-[15px] font-semibold text-[var(--tsp-text)]">{line.slice(4)}</h3>;
+          return <h3 key={i} className="mb-1.5 mt-4 text-[14px] font-semibold text-[var(--tsp-text)] sm:text-[15px]">{line.slice(4)}</h3>;
         if (line.startsWith("**") && line.endsWith("**"))
           return <p key={i} className="font-semibold text-[var(--tsp-text)]">{line.slice(2, -2)}</p>;
         if (line.startsWith("- "))
