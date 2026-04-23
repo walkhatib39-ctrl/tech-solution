@@ -154,6 +154,8 @@ const TASK_EDITOR_FIELD_CLASS =
   "h-11 w-full rounded-[10px] border bg-white px-3 text-[13px] text-[var(--tsp-text)] outline-none transition";
 const TASK_EDITOR_TEXTAREA_CLASS =
   "min-h-[140px] w-full rounded-[10px] border bg-white px-3 py-3 text-[13px] text-[var(--tsp-text)] outline-none transition";
+const TASK_EDITOR_PICKER_FIELD_CLASS =
+  "relative flex h-11 w-full items-center gap-2 rounded-[10px] border border-[color:rgba(15,30,53,0.16)] bg-white px-3 text-[13px] transition focus-within:border-[color:rgba(15,30,53,0.28)] focus-within:ring-2 focus-within:ring-[color:rgba(15,30,53,0.10)]";
 
 // ─── Utility functions ───────────────────────────────────────────────────────
 
@@ -309,6 +311,10 @@ function formatTaskLongDateTime(value: string, time?: string) {
   }
 
   return time ? `${dateLabel} à ${time}` : dateLabel;
+}
+
+function formatTaskInputDate(value: string) {
+  return formatTaskLongDate(value) || value;
 }
 
 function formatProjectDateTime(value: string) {
@@ -5042,16 +5048,22 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
                 <div className="grid gap-2">
                   <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date début</label>
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px]">
-                    <input
+                    <NativePickerField
+                      icon={<Calendar className="h-3.5 w-3.5" />}
+                      onChange={(value) =>
+                        setDraft((current) => ({ ...current, startDate: value }))
+                      }
+                      placeholder="jj/mm/aaaa"
                       type="date"
-                      className={TASK_EDITOR_FIELD_CLASS}
-                      onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))}
                       value={draft.startDate}
                     />
-                    <input
+                    <NativePickerField
+                      icon={<Clock3 className="h-3.5 w-3.5" />}
+                      onChange={(value) =>
+                        setDraft((current) => ({ ...current, startTime: value }))
+                      }
+                      placeholder="hh:mm"
                       type="time"
-                      className={TASK_EDITOR_FIELD_CLASS}
-                      onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))}
                       value={draft.startTime}
                     />
                   </div>
@@ -5059,16 +5071,22 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
                 <div className="grid gap-2">
                   <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date limite</label>
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px]">
-                    <input
+                    <NativePickerField
+                      icon={<Calendar className="h-3.5 w-3.5" />}
+                      onChange={(value) =>
+                        setDraft((current) => ({ ...current, dueDate: value }))
+                      }
+                      placeholder="jj/mm/aaaa"
                       type="date"
-                      className={TASK_EDITOR_FIELD_CLASS}
-                      onChange={(e) => setDraft((current) => ({ ...current, dueDate: e.target.value }))}
                       value={draft.dueDate}
                     />
-                    <input
+                    <NativePickerField
+                      icon={<Clock3 className="h-3.5 w-3.5" />}
+                      onChange={(value) =>
+                        setDraft((current) => ({ ...current, dueTime: value }))
+                      }
+                      placeholder="hh:mm"
                       type="time"
-                      className={TASK_EDITOR_FIELD_CLASS}
-                      onChange={(e) => setDraft((current) => ({ ...current, dueTime: e.target.value }))}
                       value={draft.dueTime}
                     />
                   </div>
@@ -5252,6 +5270,47 @@ function FieldSelect({ children, onChange, value }: { children: React.ReactNode;
     <select className={TASK_EDITOR_FIELD_CLASS} onChange={(e) => onChange(e.target.value)} value={value}>
       {children}
     </select>
+  );
+}
+
+function NativePickerField({
+  icon,
+  onChange,
+  placeholder,
+  type,
+  value,
+}: {
+  icon: React.ReactNode;
+  onChange: (value: string) => void;
+  placeholder: string;
+  type: "date" | "time";
+  value: string;
+}) {
+  const displayValue =
+    type === "date"
+      ? value
+        ? formatTaskInputDate(value)
+        : placeholder
+      : value || placeholder;
+
+  return (
+    <label className={TASK_EDITOR_PICKER_FIELD_CLASS}>
+      <span className="shrink-0 text-[var(--tsp-text-secondary)]">{icon}</span>
+      <span
+        className={`min-w-0 flex-1 truncate ${
+          value ? "text-[var(--tsp-text)]" : "text-[var(--tsp-text-secondary)]"
+        }`}
+      >
+        {displayValue}
+      </span>
+      <ChevronDown className="h-4 w-4 shrink-0 text-[var(--tsp-text-secondary)]" />
+      <input
+        className="absolute inset-0 cursor-pointer opacity-0"
+        onChange={(event) => onChange(event.target.value)}
+        type={type}
+        value={value}
+      />
+    </label>
   );
 }
 
