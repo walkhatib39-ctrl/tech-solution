@@ -69,7 +69,9 @@ export interface ManagedTask {
   status: TaskStatus;
   priority: TaskPriority;
   startDate: string;
+  startTime: string;
   dueDate: string;
+  dueTime: string;
   note: string;
   responsible: string;
   createdAt: string;

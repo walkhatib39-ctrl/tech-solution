@@ -686,8 +686,9 @@ p {
 .projects-theme select,
 .projects-theme textarea {
   background: #fff;
-  border-color: var(--tsp-border);
+  border: 1px solid color-mix(in srgb, var(--tsp-text) 16%, white);
   border-radius: 10px;
+  box-shadow: none;
   color: var(--tsp-text);
 }
 

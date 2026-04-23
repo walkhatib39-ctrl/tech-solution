@@ -150,6 +150,10 @@ const WORKSPACE_SESSION_KEY = "techsolution-projects-workspace";
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
 const PROJECT_TITLE_STYLE = { fontSize: "clamp(1rem, 0.92rem + 0.55vw, 1.35rem)", letterSpacing: 0 };
 const TASK_PANEL_TITLE_STYLE = { fontSize: "13px", letterSpacing: 0, lineHeight: 1.2 };
+const TASK_EDITOR_FIELD_CLASS =
+  "h-11 w-full rounded-[10px] border bg-white px-3 text-[13px] text-[var(--tsp-text)] outline-none transition";
+const TASK_EDITOR_TEXTAREA_CLASS =
+  "min-h-[140px] w-full rounded-[10px] border bg-white px-3 py-3 text-[13px] text-[var(--tsp-text)] outline-none transition";
 
 // ─── Utility functions ───────────────────────────────────────────────────────
 
@@ -161,12 +165,16 @@ function createId(prefix: string) {
 
 function isOverdue(task: ManagedTask) {
   if (!task.dueDate || task.status === "Terminé") return false;
-  return new Date(`${task.dueDate}T23:59:59`).getTime() < Date.now();
+  const dueTime = task.dueTime || "23:59";
+  return new Date(`${task.dueDate}T${dueTime}:59`).getTime() < Date.now();
 }
 
 function getTaskTimeValue(task: ManagedTask) {
   const d = task.dueDate || task.startDate;
-  return d ? new Date(`${d}T00:00:00`).getTime() : Number.MAX_SAFE_INTEGER;
+  const t = task.dueDate
+    ? task.dueTime || "23:59"
+    : task.startTime || "00:00";
+  return d ? new Date(`${d}T${t}:00`).getTime() : Number.MAX_SAFE_INTEGER;
 }
 
 function getPriorityWeight(p: TaskPriority) {
@@ -175,7 +183,7 @@ function getPriorityWeight(p: TaskPriority) {
 
 function buildBlankTask(projectId: string): Omit<ManagedTask, "id"> {
   return { title: "", projectId, status: "À faire", priority: "Moyenne",
-           sectionId: null, startDate: "", dueDate: "", note: "", responsible: "",
+           sectionId: null, startDate: "", startTime: "", dueDate: "", dueTime: "", note: "", responsible: "",
            createdAt: "", createdBy: "", updatedAt: "", updatedBy: "",
            statusChangedAt: "", statusChangedBy: "", completedAt: "", completedBy: "",
            attachments: [] };
@@ -294,6 +302,15 @@ function formatTaskLongDate(value: string) {
   }).format(date);
 }
 
+function formatTaskLongDateTime(value: string, time?: string) {
+  const dateLabel = formatTaskLongDate(value);
+  if (!dateLabel) {
+    return "";
+  }
+
+  return time ? `${dateLabel} à ${time}` : dateLabel;
+}
+
 function formatProjectDateTime(value: string) {
   const date = parseProjectDate(value);
   if (!date) return "";
@@ -307,8 +324,12 @@ function formatProjectDateTime(value: string) {
 }
 
 function formatTaskDateRange(task: ManagedTask) {
-  const start = formatTaskShortDate(task.startDate);
-  const due = formatTaskShortDate(task.dueDate);
+  const start = task.startDate
+    ? [formatTaskShortDate(task.startDate), task.startTime || null].filter(Boolean).join(" · ")
+    : "";
+  const due = task.dueDate
+    ? [formatTaskShortDate(task.dueDate), task.dueTime || null].filter(Boolean).join(" · ")
+    : "";
   if (start && due) return `${start} — ${due}`;
   return due || start || "Dates à préciser";
 }
@@ -2060,7 +2081,7 @@ function TaskCard({ task }: { task: ManagedTask }) {
           )}
           {task.dueDate && (
             <span className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${isOverdue(task) ? "bg-[#fef2f2] text-[#dc2626]" : "bg-[var(--tsp-bg-surface)] text-[var(--tsp-text-secondary)]"}`}>
-              <Calendar className="h-2.5 w-2.5" />{task.dueDate}
+              <Calendar className="h-2.5 w-2.5" />{formatTaskLongDateTime(task.dueDate, task.dueTime)}
             </span>
           )}
         </div>
@@ -2138,7 +2159,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
     <div className="min-w-[980px] divide-y divide-slate-100">
       {/* Table header */}
       <div className="grid grid-cols-[2fr_140px_100px_130px_120px_120px_1fr_80px] gap-0 bg-slate-50/80 px-6 py-2.5">
-        {["Tâche", "Statut", "Priorité", "Responsable", "Début", "Limite", "Note", ""].map((h) => (
+        {["Tâche", "Statut", "Priorité", "Responsable", "Début", "Limite", "Description", ""].map((h) => (
           <div key={h} className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{h}</div>
         ))}
       </div>
@@ -2212,12 +2233,12 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
                 </div>
                 {/* Start date */}
                 <div className={`text-xs ${isDone ? "line-through text-slate-300" : "text-slate-400"}`}>
-                  {task.startDate ? <span className="flex items-center gap-1"><Calendar className="h-3 w-3 text-slate-300" />{task.startDate}</span> : <span className="text-slate-300">—</span>}
+                  {task.startDate ? <span className="flex items-center gap-1"><Calendar className="h-3 w-3 text-slate-300" />{formatTaskLongDateTime(task.startDate, task.startTime)}</span> : <span className="text-slate-300">—</span>}
                 </div>
                 {/* Due date */}
                 <div>
                   {task.dueDate
-                    ? <span className={`flex items-center gap-1 text-xs font-medium ${isDone ? "line-through text-slate-300" : isOverdue(task) ? "text-red-500" : "text-slate-400"}`}><Calendar className="h-3 w-3" />{task.dueDate}</span>
+                    ? <span className={`flex items-center gap-1 text-xs font-medium ${isDone ? "line-through text-slate-300" : isOverdue(task) ? "text-red-500" : "text-slate-400"}`}><Calendar className="h-3 w-3" />{formatTaskLongDateTime(task.dueDate, task.dueTime)}</span>
                     : <span className="text-xs text-slate-300">—</span>}
                 </div>
                 {/* Note */}
@@ -4712,8 +4733,8 @@ function TaskPreviewPage({
 }) {
   const dateRange = formatTaskDateRange(task);
   const createdDate = formatTaskLongDate(task.createdAt);
-  const executionDate = formatTaskLongDate(task.startDate);
-  const deadlineDate = formatTaskLongDate(task.dueDate);
+  const executionDate = formatTaskLongDateTime(task.startDate, task.startTime);
+  const deadlineDate = formatTaskLongDateTime(task.dueDate, task.dueTime);
   const creationDetails = [
     createdDate ? `créée le ${createdDate}` : "",
     task.createdBy ? `par ${task.createdBy}` : "",
@@ -4987,11 +5008,24 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
             <input
               autoFocus
               required
-              className="h-11 w-full px-3 text-[13px]"
+              className={TASK_EDITOR_FIELD_CLASS}
               onChange={(e) => setDraft((current) => ({ ...current, title: e.target.value }))}
               placeholder="Ex : Optimiser les pages département IDF"
               value={draft.title}
             />
+
+            <div className="mt-4">
+              <label className="projects-label mb-2 block">Description</label>
+              <textarea
+                className={TASK_EDITOR_TEXTAREA_CLASS}
+                onChange={(e) =>
+                  setDraft((current) => ({ ...current, note: e.target.value }))
+                }
+                placeholder="Contexte, détails, ressources, contraintes, consignes d’exécution..."
+                rows={6}
+                value={draft.note}
+              />
+            </div>
           </div>
 
           <div className="projects-surface p-[14px] sm:p-5">
@@ -5005,23 +5039,39 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="grid gap-2">
                   <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date début</label>
-                  <input
-                    type="date"
-                    className="h-11 w-full px-3 text-[13px]"
-                    onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))}
-                    value={draft.startDate}
-                  />
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px]">
+                    <input
+                      type="date"
+                      className={TASK_EDITOR_FIELD_CLASS}
+                      onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))}
+                      value={draft.startDate}
+                    />
+                    <input
+                      type="time"
+                      className={TASK_EDITOR_FIELD_CLASS}
+                      onChange={(e) => setDraft((current) => ({ ...current, startTime: e.target.value }))}
+                      value={draft.startTime}
+                    />
+                  </div>
                 </div>
-                <div>
+                <div className="grid gap-2">
                   <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date limite</label>
-                  <input
-                    type="date"
-                    className="h-11 w-full px-3 text-[13px]"
-                    onChange={(e) => setDraft((current) => ({ ...current, dueDate: e.target.value }))}
-                    value={draft.dueDate}
-                  />
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px]">
+                    <input
+                      type="date"
+                      className={TASK_EDITOR_FIELD_CLASS}
+                      onChange={(e) => setDraft((current) => ({ ...current, dueDate: e.target.value }))}
+                      value={draft.dueDate}
+                    />
+                    <input
+                      type="time"
+                      className={TASK_EDITOR_FIELD_CLASS}
+                      onChange={(e) => setDraft((current) => ({ ...current, dueTime: e.target.value }))}
+                      value={draft.dueTime}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -5199,7 +5249,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
 
 function FieldSelect({ children, onChange, value }: { children: React.ReactNode; onChange: (v: string) => void; value: string }) {
   return (
-    <select className="h-11 w-full px-3 text-[13px]" onChange={(e) => onChange(e.target.value)} value={value}>
+    <select className={TASK_EDITOR_FIELD_CLASS} onChange={(e) => onChange(e.target.value)} value={value}>
       {children}
     </select>
   );

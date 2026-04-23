@@ -317,6 +317,10 @@ function normalizeTask(task: Partial<ManagedTask>): ManagedTask | null {
   const priority = TASK_PRIORITIES.includes(task.priority ?? "Moyenne")
     ? task.priority ?? "Moyenne"
     : "Moyenne";
+  const normalizeTaskTime = (value: unknown) =>
+    typeof value === "string" && /^\d{2}:\d{2}$/.test(value.trim())
+      ? value.trim()
+      : "";
 
   return {
     id:
@@ -332,7 +336,9 @@ function normalizeTask(task: Partial<ManagedTask>): ManagedTask | null {
     status,
     priority,
     startDate: typeof task.startDate === "string" ? task.startDate : "",
+    startTime: normalizeTaskTime(task.startTime),
     dueDate: typeof task.dueDate === "string" ? task.dueDate : "",
+    dueTime: normalizeTaskTime(task.dueTime),
     note: typeof task.note === "string" ? task.note : "",
     responsible: typeof task.responsible === "string" ? task.responsible : "",
     createdAt: typeof task.createdAt === "string" ? task.createdAt : "",
@@ -929,7 +935,9 @@ function getTaskEditableChanges(current: ManagedTask, next: ManagedTask) {
       current.sectionId !== next.sectionId ||
       current.priority !== next.priority ||
       current.startDate !== next.startDate ||
+      current.startTime !== next.startTime ||
       current.dueDate !== next.dueDate ||
+      current.dueTime !== next.dueTime ||
       current.note !== next.note ||
       !areTaskAttachmentsEqual(current.attachments, next.attachments),
     responsibleChanged: current.responsible !== next.responsible,
@@ -1574,7 +1582,9 @@ async function ensureProjectsSchema() {
         status VARCHAR(40) NOT NULL,
         priority VARCHAR(40) NOT NULL,
         start_date DATE NULL,
+        start_time VARCHAR(10) NULL,
         due_date DATE NULL,
+        due_time VARCHAR(10) NULL,
         note TEXT NULL,
         responsible VARCHAR(190) NULL,
         created_on DATETIME NULL,
@@ -1609,6 +1619,36 @@ async function ensureProjectsSchema() {
         ALTER TABLE tasks
           ADD COLUMN section_id VARCHAR(120) NULL AFTER project_id,
           ADD INDEX idx_tasks_section (section_id)
+      `);
+    }
+
+    const [taskStartTimeColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'start_time'`
+    );
+
+    if (taskStartTimeColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN start_time VARCHAR(10) NULL AFTER start_date
+      `);
+    }
+
+    const [taskDueTimeColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'due_time'`
+    );
+
+    if (taskDueTimeColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN due_time VARCHAR(10) NULL AFTER due_date
       `);
     }
 
@@ -2228,8 +2268,8 @@ async function saveProjectsDataWithoutSchema(
   for (const task of data.tasks) {
     await queryable.execute(
       `INSERT INTO tasks
-        (id, project_id, section_id, title, status, priority, start_date, due_date, note, responsible, created_on, created_by, updated_on, updated_by, status_changed_on, status_changed_by, completed_on, completed_by, attachments_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, section_id, title, status, priority, start_date, start_time, due_date, due_time, note, responsible, created_on, created_by, updated_on, updated_by, status_changed_on, status_changed_by, completed_on, completed_by, attachments_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.projectId,
@@ -2238,7 +2278,9 @@ async function saveProjectsDataWithoutSchema(
         task.status,
         task.priority,
         toNullableDate(task.startDate),
+        task.startTime || null,
         toNullableDate(task.dueDate),
+        task.dueTime || null,
         task.note,
         task.responsible,
         toNullableDateTime(task.createdAt),
@@ -2412,7 +2454,9 @@ export async function getProjectsData(): Promise<ProjectsData> {
       status,
       priority,
       start_date AS startDate,
+      start_time AS startTime,
       due_date AS dueDate,
+      due_time AS dueTime,
       note,
       responsible,
       created_on AS createdAt,
@@ -2558,7 +2602,9 @@ export async function getProjectsData(): Promise<ProjectsData> {
       status: row.status,
       priority: row.priority,
       startDate: fromDate(row.startDate),
+      startTime: String(row.startTime ?? ""),
       dueDate: fromDate(row.dueDate),
+      dueTime: String(row.dueTime ?? ""),
       note: String(row.note ?? ""),
       responsible: String(row.responsible ?? ""),
       createdAt: typeof row.createdAt === "string" ? String(row.createdAt) : "",
