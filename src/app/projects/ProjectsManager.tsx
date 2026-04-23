@@ -44,8 +44,6 @@ import {
   InterventionStatus,
   ManagedProject,
   ManagedTask,
-  PROJECT_STATUSES,
-  PROJECT_TYPES,
   ProjectDocFile,
   ProjectDocFolder,
   ProjectIntervention,
@@ -93,6 +91,13 @@ const STATUS_META: Record<TaskStatus, { badge: string; bar: string; dot: string 
   "Terminé": { badge: "bg-[#f0fdf4] text-[#15803d]",   bar: "bg-[#16a34a]", dot: "bg-[#16a34a]" },
 };
 
+const STATUS_BADGE_STYLE: Record<TaskStatus, { backgroundColor: string; color: string }> = {
+  "À faire": { backgroundColor: "#ede9e3", color: "#5a6a7e" },
+  "En cours": { backgroundColor: "#eff6ff", color: "#1d4ed8" },
+  Bloqué: { backgroundColor: "#fef2f2", color: "#dc2626" },
+  Terminé: { backgroundColor: "#f0fdf4", color: "#15803d" },
+};
+
 const HEALTH_META: Record<ManagedProject["health"], { cls: string; dot: string }> = {
   Bon:      { cls: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-400" },
   Attention:{ cls: "bg-amber-50 text-amber-700",     dot: "bg-amber-400"   },
@@ -113,10 +118,6 @@ const INTERVENTION_META: Record<InterventionStatus, { cls: string; dot: string }
   Annulée:     { cls: "bg-[#fef2f2] text-[#dc2626]", dot: "bg-[#dc2626]" },
 };
 
-const STATUS_DOT: Record<ManagedProject["status"], string> = {
-  Actif: "bg-emerald-400", "En pause": "bg-amber-400", Terminé: "bg-slate-400",
-};
-
 const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType; shortLabel?: string }> = [
   { label: "Pilotage",      icon: SlidersHorizontal },
   { label: "Tâches",        icon: Columns3          },
@@ -126,6 +127,7 @@ const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType; shortLab
 ];
 
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
+const PROJECT_TITLE_STYLE = { fontSize: "clamp(1rem, 0.92rem + 0.55vw, 1.35rem)", letterSpacing: 0 };
 
 // ─── Utility functions ───────────────────────────────────────────────────────
 
@@ -300,7 +302,7 @@ interface ProjectsManagerProps {
   currentUser: CurrentProjectUser;
   logoutAction: () => Promise<void>;
 }
-interface ProjectFormState { name: string; type: ManagedProject["type"]; color: string; status: ManagedProject["status"] }
+interface ProjectFormState { name: string; color: string }
 
 export default function ProjectsManager({ currentUser: initialUser, logoutAction }: ProjectsManagerProps) {
   const [data, setData] = useState<ProjectsData>(EMPTY_DATA);
@@ -319,7 +321,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [isTaskEditorOpen, setIsTaskEditorOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ManagedTask | null>(null);
   const [showAddProject, setShowAddProject] = useState(false);
-  const [projectForm, setProjectForm] = useState<ProjectFormState>({ name: "", type: "DEV", color: "#1e3a5f", status: "Actif" });
+  const [projectForm, setProjectForm] = useState<ProjectFormState>({ name: "", color: "#1e3a5f" });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSuperAdmin = currentUser.role === "super_admin";
 
@@ -467,12 +469,12 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const handleAddProject = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isSuperAdmin || !projectForm.name.trim()) return;
-    const proj: ManagedProject = { id: createId("project"), name: projectForm.name.trim(), type: projectForm.type, color: projectForm.color, status: projectForm.status, health: "Bon", progress: 0, nextAction: "", blockers: "", lastUpdate: "" };
+    const proj: ManagedProject = { id: createId("project"), name: projectForm.name.trim(), type: "AUTRE", color: projectForm.color, status: "Actif", health: "Bon", progress: 0, nextAction: "", blockers: "", lastUpdate: "" };
     updateData((c) => ({ ...c, projects: [...c.projects, proj], trackingFields: [...c.trackingFields, ...buildTrackingTemplate(proj)] }));
     setSelectedProjectId(proj.id);
     setWorkspaceView("project");
     setIsSidebarOpen(false);
-    setProjectForm({ name: "", type: "DEV", color: "#1e3a5f", status: "Actif" });
+    setProjectForm({ name: "", color: "#1e3a5f" });
     setShowAddProject(false);
   };
 
@@ -641,6 +643,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
           <div className="space-y-2">
             {data.projects.map((project) => {
               const isActive = workspaceView === "project" && selectedProject?.id === project.id;
+              const projectTaskCount = data.tasks.filter((task) => task.projectId === project.id).length;
               return (
                 <button key={project.id} onClick={() => { setSelectedProjectId(project.id); setWorkspaceView("project"); setIsSidebarOpen(false); }} type="button"
                   className={`group flex w-full items-center gap-3 rounded-[10px] border border-transparent border-l-[3px] px-3 py-2.5 text-left transition-all ${isActive ? "bg-white text-[var(--tsp-text)]" : "bg-white/[0.05] text-white/[0.75] hover:bg-white/[0.08] hover:text-white"}`}
@@ -652,9 +655,8 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: project.color }} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-semibold">{project.name}</span>
-                    <span className="mt-0.5 flex items-center gap-1.5">
-                      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[project.status]}`} />
-                      <span className={`text-[11px] ${isActive ? "text-[var(--tsp-text-secondary)]" : "text-white/[0.45]"}`}>{project.type} · {project.status}</span>
+                    <span className={`mt-0.5 block text-[11px] ${isActive ? "text-[var(--tsp-text-secondary)]" : "text-white/[0.45]"}`}>
+                      {projectTaskCount} tâche{projectTaskCount > 1 ? "s" : ""}
                     </span>
                   </span>
                   {isActive && <ChevronRight className="h-3 w-3 shrink-0 text-[var(--tsp-text-secondary)]" />}
@@ -693,15 +695,10 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                   onChange={(e) => setProjectForm((c) => ({ ...c, name: e.target.value }))}
                   placeholder="Nom du projet" value={projectForm.name}
                 />
-                <div className="grid grid-cols-[1fr_34px] gap-2">
-                  <select className="h-9 rounded-[10px] border border-white/10 bg-white/10 px-2 text-[13px] text-white/80 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, type: e.target.value as ManagedProject["type"] }))} value={projectForm.type}>
-                    {PROJECT_TYPES.map((t) => <option key={t} value={t} className="bg-[#0d1b2a]">{t}</option>)}
-                  </select>
-                  <input aria-label="Couleur" type="color" className="h-9 rounded-[10px] border border-white/10 bg-white/10 p-1" onChange={(e) => setProjectForm((c) => ({ ...c, color: e.target.value }))} value={projectForm.color} />
+                <div className="flex items-center justify-between rounded-[10px] border border-white/10 bg-white/10 px-3 py-2">
+                  <span className="text-[12px] font-medium text-white/[0.55]">Couleur</span>
+                  <input aria-label="Couleur" type="color" className="h-8 w-10 rounded-[8px] border border-white/10 bg-white/10 p-1" onChange={(e) => setProjectForm((c) => ({ ...c, color: e.target.value }))} value={projectForm.color} />
                 </div>
-                <select className="h-9 w-full rounded-[10px] border border-white/10 bg-white/10 px-2 text-[13px] text-white/80 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, status: e.target.value as ManagedProject["status"] }))} value={projectForm.status}>
-                  {PROJECT_STATUSES.map((s) => <option key={s} value={s} className="bg-[#0d1b2a]">{s}</option>)}
-                </select>
                 <button type="submit" className="projects-btn-secondary flex h-9 w-full items-center justify-center gap-1.5 text-[13px] font-semibold">
                   <Plus className="h-3.5 w-3.5" /> Créer
                 </button>
@@ -775,7 +772,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               <button onClick={() => void loadData()} className="projects-btn-primary px-5 py-2 text-sm font-semibold">Réessayer</button>
             </div>
           ) : workspaceView === "team" && isSuperAdmin ? (
-            <div className="projects-shell rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
+            <div className="projects-shell projects-shell-mobile-flat rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
               <div className="border-b border-[var(--tsp-border)] bg-[var(--tsp-navy)] px-4 py-4 text-white sm:px-5 sm:py-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start justify-between gap-3 sm:hidden">
@@ -826,7 +823,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               />
             </div>
           ) : selectedProject ? (
-            <div className="projects-shell rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
+            <div className="projects-shell projects-shell-mobile-flat rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
 
               {/* ── Project header ── */}
               <div className="border-b border-white/[0.08] bg-[var(--tsp-navy)] px-4 pt-4 pb-0 text-white sm:px-5 sm:pt-5">
@@ -837,23 +834,20 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                       <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
                         <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full sm:h-3 sm:w-3" style={{ backgroundColor: selectedProject.color }} />
                         <div className="min-w-0">
-                          <div
-                            aria-level={1}
-                            className="truncate font-bold leading-[1.1] text-white"
-                            role="heading"
-                            style={{ fontSize: "clamp(1rem, 0.95rem + 0.8vw, 1.6rem)", letterSpacing: 0 }}
-                          >
-                            {selectedProject.name}
-                          </div>
+                        <div
+                          aria-level={1}
+                          className="truncate font-bold leading-[1.1] text-white"
+                          role="heading"
+                          style={PROJECT_TITLE_STYLE}
+                        >
+                          {selectedProject.name}
+                        </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                            <TypeBadge type={selectedProject.type} />
-                            <StatusBadge status={selectedProject.status} />
                             <span className="text-[12px] text-white/[0.55]">{projectTasks.length} tâche{projectTasks.length > 1 ? "s" : ""}</span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 sm:hidden">
-                        <SaveBadge saveState={saveState} />
                         <button
                           aria-label="Ouvrir le menu"
                           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white"
@@ -1029,9 +1023,9 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
 
         {/* Next actions */}
         <div>
-          <div className="mb-3 flex items-center gap-2">
-            <Zap className="h-4 w-4 text-[var(--tsp-navy)]" />
-            <h3 className="text-[15px] font-semibold text-[var(--tsp-text)]">Prochaines actions</h3>
+            <div className="mb-3 flex items-center gap-2">
+              <Zap className="h-4 w-4 text-[var(--tsp-navy)]" />
+            <h3 className="font-bold text-[var(--tsp-text)]" style={PROJECT_TITLE_STYLE}>Prochaines actions</h3>
             {nextActionTasks.length > 0 && (
               <span className="ml-auto rounded-md bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">{nextActionTasks.length}</span>
             )}
@@ -1047,7 +1041,7 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
           <div>
             <div className="mb-3 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-red-500" />
-              <h3 className="text-[15px] font-semibold text-[var(--tsp-text)]">Blocages</h3>
+              <h3 className="font-bold text-[var(--tsp-text)]" style={PROJECT_TITLE_STYLE}>Blocages</h3>
               <span className="ml-auto rounded-md bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">{blockedTasks.length}</span>
             </div>
             <div className="space-y-2">
@@ -1097,7 +1091,12 @@ function TaskCard({ task }: { task: ManagedTask }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <p className="text-[14px] font-semibold text-[var(--tsp-text)]">{task.title}</p>
-          <span className={`shrink-0 rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${sm.badge}`}>{task.status}</span>
+          <span
+            className="shrink-0 rounded-md px-2.5 py-0.5 text-[11px] font-semibold"
+            style={STATUS_BADGE_STYLE[task.status]}
+          >
+            {task.status}
+          </span>
         </div>
         {task.note && <p className="mt-1 text-[12px] leading-relaxed text-[var(--tsp-text-secondary)]">{task.note}</p>}
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -1164,7 +1163,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
               onToggle={() => toggleSection(groupKey)}
             />
             {isOpen && (
-              <div className="space-y-2 bg-slate-50/70 px-2 py-2.5">
+              <div className="space-y-2 bg-[var(--tsp-bg-page)] px-2 py-2.5">
                 {group.tasks.map((task) => (
                   <MobileTaskCard
                     key={task.id}
@@ -1241,8 +1240,8 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
                 {/* Status */}
                 <div>
                   <select
-                    className={`h-7 rounded-full border-0 bg-white pl-2.5 pr-1 text-xs font-semibold outline-none transition ${sm.badge}`}
-                    style={{ appearance: "none" }}
+                    className="h-7 rounded-md border-0 pl-2.5 pr-1 text-xs font-semibold outline-none transition"
+                    style={{ ...STATUS_BADGE_STYLE[task.status], appearance: "none" }}
                     onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
                     value={task.status}
                   >
@@ -1328,7 +1327,6 @@ function MobileTaskCard({ onChangeStatus, onDeleteTask, onEditTask, task }: {
   task: ManagedTask;
 }) {
   const isDone = task.status === "Terminé";
-  const sm = STATUS_META[task.status];
   const initials = getUserInitials(task.responsible);
   const dateRange = formatTaskDateRange(task);
 
@@ -1355,7 +1353,8 @@ function MobileTaskCard({ onChangeStatus, onDeleteTask, onEditTask, task }: {
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <select
-            className={`h-7 appearance-none rounded-md border-0 px-2.5 pr-6 text-[11px] font-semibold outline-none ${sm.badge}`}
+            className="h-7 appearance-none rounded-md border-0 px-2.5 pr-6 text-[11px] font-semibold outline-none"
+            style={STATUS_BADGE_STYLE[task.status]}
             onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
             value={task.status}
           >
@@ -2250,7 +2249,7 @@ function SuiviTab({ fields, updates, project, onAddField, onUpdateField, onDelet
       <section>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-slate-800">Indicateurs · {project.type}</h2>
+            <h2 className="text-base font-bold text-slate-800">Indicateurs</h2>
             <p className="text-xs text-slate-400">Métriques libres, adaptées au projet</p>
           </div>
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); onAddField(project.id, fieldLabel); setFieldLabel(""); }}>
@@ -2517,15 +2516,6 @@ function StatPill({ label, value, color }: { label: string; value: number; color
       <span className="max-w-full truncate text-[10px] font-medium text-white/[0.45]">{label}</span>
     </div>
   );
-}
-
-function TypeBadge({ type }: { type: ManagedProject["type"] }) {
-  return <span className="rounded-md bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-white/[0.75]">{type}</span>;
-}
-
-function StatusBadge({ status }: { status: ManagedProject["status"] }) {
-  const cls = status === "Actif" ? "bg-[#f0fdf4] text-[#15803d]" : status === "En pause" ? "bg-[#fef3c7] text-[#92400e]" : "bg-[#ede9e3] text-[#5a6a7e]";
-  return <span className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${cls}`}>{status}</span>;
 }
 
 function EmptyState({ label, small }: { label: string; small?: boolean }) {
