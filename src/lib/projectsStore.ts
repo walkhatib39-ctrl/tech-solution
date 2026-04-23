@@ -13,6 +13,7 @@ import {
   PROJECT_USER_ROLES,
   PROJECT_TYPES,
   ProjectAccess,
+  ProjectActivityLog,
   ProjectDocFile,
   ProjectDocFolder,
   ProjectIntervention,
@@ -335,6 +336,14 @@ function normalizeTask(task: Partial<ManagedTask>): ManagedTask | null {
     responsible: typeof task.responsible === "string" ? task.responsible : "",
     createdAt: typeof task.createdAt === "string" ? task.createdAt : "",
     createdBy: typeof task.createdBy === "string" ? task.createdBy.trim() : "",
+    updatedAt: typeof task.updatedAt === "string" ? task.updatedAt : "",
+    updatedBy: typeof task.updatedBy === "string" ? task.updatedBy.trim() : "",
+    statusChangedAt:
+      typeof task.statusChangedAt === "string" ? task.statusChangedAt : "",
+    statusChangedBy:
+      typeof task.statusChangedBy === "string" ? task.statusChangedBy.trim() : "",
+    completedAt: typeof task.completedAt === "string" ? task.completedAt : "",
+    completedBy: typeof task.completedBy === "string" ? task.completedBy.trim() : "",
     attachments: Array.isArray(task.attachments)
       ? task.attachments
           .map((attachment) => normalizeTaskAttachment(attachment))
@@ -359,6 +368,61 @@ function normalizeTaskAttachment(attachment: Partial<TaskAttachment>): TaskAttac
     path: attachment.path.trim(),
     mimeType: typeof attachment.mimeType === "string" ? attachment.mimeType.trim() : "",
     size: Number.isFinite(Number(attachment.size)) ? Math.max(0, Number(attachment.size)) : 0,
+  };
+}
+
+function normalizeActivityLog(
+  log: Partial<ProjectActivityLog>
+): ProjectActivityLog | null {
+  if (
+    !log ||
+    typeof log.projectId !== "string" ||
+    !log.projectId.trim() ||
+    typeof log.entityId !== "string" ||
+    !log.entityId.trim() ||
+    typeof log.actorUserId !== "string" ||
+    !log.actorUserId.trim() ||
+    typeof log.actorName !== "string" ||
+    !log.actorName.trim() ||
+    typeof log.message !== "string" ||
+    !log.message.trim()
+  ) {
+    return null;
+  }
+
+  const allowedActions = new Set([
+    "created",
+    "updated",
+    "deleted",
+    "status_changed",
+    "assigned",
+    "unassigned",
+  ]);
+  const entityType = log.entityType === "task" ? "task" : "task";
+  const action = allowedActions.has(String(log.action))
+    ? (String(log.action) as ProjectActivityLog["action"])
+    : "updated";
+
+  return {
+    id:
+      typeof log.id === "string" && log.id.trim()
+        ? log.id.trim()
+        : createId("activity"),
+    projectId: log.projectId.trim(),
+    entityType,
+    entityId: log.entityId.trim(),
+    action,
+    actorUserId: log.actorUserId.trim(),
+    actorName: log.actorName.trim(),
+    message: log.message.trim(),
+    occurredAt:
+      typeof log.occurredAt === "string" && log.occurredAt
+        ? log.occurredAt
+        : new Date().toISOString(),
+    meta:
+      log.meta && typeof log.meta === "object" && !Array.isArray(log.meta)
+        ? (log.meta as Record<string, unknown>)
+        : {},
   };
 }
 
@@ -772,6 +836,22 @@ function normalizeProjectsData(input: Partial<ProjectsData>): ProjectsData {
           return true;
         })
     : [];
+  const activityLogs = Array.isArray(input.activityLogs)
+    ? input.activityLogs
+        .map((log) => normalizeActivityLog(log))
+        .filter((log): log is ProjectActivityLog =>
+          Boolean(log && projectIds.has(log.projectId))
+        )
+        .sort((a, b) => {
+          const timeDiff =
+            new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
+          if (timeDiff !== 0) {
+            return timeDiff;
+          }
+
+          return b.id.localeCompare(a.id);
+        })
+    : [];
 
   return {
     projects,
@@ -784,10 +864,233 @@ function normalizeProjectsData(input: Partial<ProjectsData>): ProjectsData {
     interventions,
     teamUsers,
     projectAccess,
+    activityLogs,
     updatedAt:
       typeof input.updatedAt === "string" && input.updatedAt
         ? input.updatedAt
         : new Date().toISOString(),
+  };
+}
+
+function areTaskAttachmentsEqual(a: TaskAttachment[], b: TaskAttachment[]) {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((attachment, index) => {
+    const other = b[index];
+    return (
+      other &&
+      attachment.name === other.name &&
+      attachment.path === other.path &&
+      attachment.mimeType === other.mimeType &&
+      attachment.size === other.size
+    );
+  });
+}
+
+function getTaskEditableChanges(current: ManagedTask, next: ManagedTask) {
+  return {
+    contentChanged:
+      current.title !== next.title ||
+      current.sectionId !== next.sectionId ||
+      current.priority !== next.priority ||
+      current.startDate !== next.startDate ||
+      current.dueDate !== next.dueDate ||
+      current.note !== next.note ||
+      !areTaskAttachmentsEqual(current.attachments, next.attachments),
+    responsibleChanged: current.responsible !== next.responsible,
+    statusChanged: current.status !== next.status,
+  };
+}
+
+function buildTaskStatusChangedMessage(
+  actorName: string,
+  title: string,
+  status: ManagedTask["status"]
+) {
+  switch (status) {
+    case "Terminé":
+      return `${actorName} a marqué la tâche "${title}" comme terminée`;
+    case "En cours":
+      return `${actorName} a passé la tâche "${title}" en cours`;
+    case "Bloqué":
+      return `${actorName} a bloqué la tâche "${title}"`;
+    default:
+      return `${actorName} a remis la tâche "${title}" à faire`;
+  }
+}
+
+function buildTaskActivityLog(
+  actor: CurrentProjectUser,
+  now: string,
+  log: Omit<ProjectActivityLog, "actorName" | "actorUserId" | "id" | "occurredAt">
+): ProjectActivityLog {
+  return {
+    id: createId("activity"),
+    actorName: actor.name,
+    actorUserId: actor.id,
+    occurredAt: now,
+    ...log,
+  };
+}
+
+function applyTaskAuditTrail(
+  currentData: ProjectsData,
+  incomingData: ProjectsData,
+  actor: CurrentProjectUser
+): ProjectsData {
+  const now = new Date().toISOString();
+  const currentTasksById = new Map(
+    currentData.tasks.map((task) => [task.id, task])
+  );
+  const appendedLogs: ProjectActivityLog[] = [];
+
+  const tasks = incomingData.tasks.map((task) => {
+    const current = currentTasksById.get(task.id);
+
+    if (!current) {
+      const createdTask: ManagedTask = {
+        ...task,
+        createdAt: now,
+        createdBy: actor.name,
+        updatedAt: now,
+        updatedBy: actor.name,
+        statusChangedAt: now,
+        statusChangedBy: actor.name,
+        completedAt: task.status === "Terminé" ? now : "",
+        completedBy: task.status === "Terminé" ? actor.name : "",
+      };
+
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "created",
+          entityId: createdTask.id,
+          entityType: "task",
+          message: `${actor.name} a créé la tâche "${createdTask.title}"`,
+          meta: {
+            responsible: createdTask.responsible || "",
+            status: createdTask.status,
+          },
+          projectId: createdTask.projectId,
+        })
+      );
+
+      return createdTask;
+    }
+
+    const { contentChanged, responsibleChanged, statusChanged } =
+      getTaskEditableChanges(current, task);
+    const taskChanged = contentChanged || responsibleChanged || statusChanged;
+
+    const nextTask: ManagedTask = {
+      ...task,
+      createdAt: current.createdAt || task.createdAt || "",
+      createdBy: current.createdBy || task.createdBy || "",
+      updatedAt: taskChanged ? now : current.updatedAt || task.updatedAt || "",
+      updatedBy: taskChanged ? actor.name : current.updatedBy || task.updatedBy || "",
+      statusChangedAt: statusChanged
+        ? now
+        : current.statusChangedAt || task.statusChangedAt || "",
+      statusChangedBy: statusChanged
+        ? actor.name
+        : current.statusChangedBy || task.statusChangedBy || "",
+      completedAt: statusChanged
+        ? task.status === "Terminé"
+          ? now
+          : ""
+        : task.status === "Terminé"
+          ? current.completedAt || task.completedAt || ""
+          : "",
+      completedBy: statusChanged
+        ? task.status === "Terminé"
+          ? actor.name
+          : ""
+        : task.status === "Terminé"
+          ? current.completedBy || task.completedBy || ""
+          : "",
+    };
+
+    if (statusChanged) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "status_changed",
+          entityId: nextTask.id,
+          entityType: "task",
+          message: buildTaskStatusChangedMessage(actor.name, nextTask.title, nextTask.status),
+          meta: {
+            from: current.status,
+            to: nextTask.status,
+          },
+          projectId: nextTask.projectId,
+        })
+      );
+    }
+
+    if (responsibleChanged) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: nextTask.responsible ? "assigned" : "unassigned",
+          entityId: nextTask.id,
+          entityType: "task",
+          message: nextTask.responsible
+            ? `${actor.name} a assigné la tâche "${nextTask.title}" à ${nextTask.responsible}`
+            : `${actor.name} a retiré le responsable de la tâche "${nextTask.title}"`,
+          meta: {
+            from: current.responsible,
+            to: nextTask.responsible,
+          },
+          projectId: nextTask.projectId,
+        })
+      );
+    }
+
+    if (contentChanged) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "updated",
+          entityId: nextTask.id,
+          entityType: "task",
+          message: `${actor.name} a mis à jour la tâche "${nextTask.title}"`,
+          meta: {
+            previousTitle: current.title,
+            title: nextTask.title,
+          },
+          projectId: nextTask.projectId,
+        })
+      );
+    }
+
+    return nextTask;
+  });
+
+  const nextTaskIds = new Set(tasks.map((task) => task.id));
+  for (const currentTask of currentData.tasks) {
+    if (!nextTaskIds.has(currentTask.id)) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "deleted",
+          entityId: currentTask.id,
+          entityType: "task",
+          message: `${actor.name} a supprimé la tâche "${currentTask.title}"`,
+          meta: {
+            title: currentTask.title,
+          },
+          projectId: currentTask.projectId,
+        })
+      );
+    }
+  }
+
+  return {
+    ...incomingData,
+    tasks,
+    activityLogs: [...appendedLogs, ...currentData.activityLogs]
+      .sort(
+        (a, b) =>
+          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+      )
+      .slice(0, 1000),
   };
 }
 
@@ -882,6 +1185,12 @@ async function ensureProjectsSchema() {
         responsible VARCHAR(190) NULL,
         created_on DATETIME NULL,
         created_by VARCHAR(190) NULL,
+        updated_on DATETIME NULL,
+        updated_by VARCHAR(190) NULL,
+        status_changed_on DATETIME NULL,
+        status_changed_by VARCHAR(190) NULL,
+        completed_on DATETIME NULL,
+        completed_by VARCHAR(190) NULL,
         attachments_json LONGTEXT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -958,6 +1267,127 @@ async function ensureProjectsSchema() {
           ADD COLUMN created_by VARCHAR(190) NULL AFTER created_on
       `);
     }
+
+    const [taskUpdatedOnColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'updated_on'`
+    );
+
+    if (taskUpdatedOnColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN updated_on DATETIME NULL AFTER created_by
+      `);
+      await pool.query(`
+        UPDATE tasks
+        SET updated_on = COALESCE(created_on, created_at)
+        WHERE updated_on IS NULL
+      `);
+    }
+
+    const [taskUpdatedByColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'updated_by'`
+    );
+
+    if (taskUpdatedByColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN updated_by VARCHAR(190) NULL AFTER updated_on
+      `);
+    }
+
+    const [taskStatusChangedOnColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'status_changed_on'`
+    );
+
+    if (taskStatusChangedOnColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN status_changed_on DATETIME NULL AFTER updated_by
+      `);
+      await pool.query(`
+        UPDATE tasks
+        SET status_changed_on = COALESCE(updated_on, created_on, created_at)
+        WHERE status_changed_on IS NULL
+      `);
+    }
+
+    const [taskStatusChangedByColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'status_changed_by'`
+    );
+
+    if (taskStatusChangedByColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN status_changed_by VARCHAR(190) NULL AFTER status_changed_on
+      `);
+    }
+
+    const [taskCompletedOnColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'completed_on'`
+    );
+
+    if (taskCompletedOnColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN completed_on DATETIME NULL AFTER status_changed_by
+      `);
+    }
+
+    const [taskCompletedByColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'completed_by'`
+    );
+
+    if (taskCompletedByColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN completed_by VARCHAR(190) NULL AFTER completed_on
+      `);
+    }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS project_activity_logs (
+        id VARCHAR(120) NOT NULL PRIMARY KEY,
+        project_id VARCHAR(120) NOT NULL,
+        entity_type VARCHAR(40) NOT NULL,
+        entity_id VARCHAR(120) NOT NULL,
+        action VARCHAR(40) NOT NULL,
+        actor_user_id VARCHAR(120) NOT NULL,
+        actor_name VARCHAR(190) NOT NULL,
+        message VARCHAR(255) NOT NULL,
+        meta_json LONGTEXT NULL,
+        occurred_on DATETIME NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_activity_project (project_id),
+        INDEX idx_activity_occurred (occurred_on),
+        CONSTRAINT fk_activity_logs_project
+          FOREIGN KEY (project_id) REFERENCES projects(id)
+          ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS project_doc_folders (
@@ -1197,6 +1627,7 @@ async function saveProjectsDataWithoutSchema(
     docFiles: [],
     docFolders: [],
     interventions: [],
+    activityLogs: [],
     projectAccess: [],
     taskSections: [],
     teamUsers: [],
@@ -1212,6 +1643,7 @@ async function saveProjectsDataWithoutSchema(
     existingUserRows.map((row) => [String(row.id), String(row.passwordHash)])
   );
 
+  await queryable.query("DELETE FROM project_activity_logs");
   await queryable.query("DELETE FROM project_access");
   await queryable.query("DELETE FROM project_interventions");
   await queryable.query("DELETE FROM project_updates");
@@ -1281,8 +1713,8 @@ async function saveProjectsDataWithoutSchema(
   for (const task of data.tasks) {
     await queryable.execute(
       `INSERT INTO tasks
-        (id, project_id, section_id, title, status, priority, start_date, due_date, note, responsible, created_on, created_by, attachments_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, section_id, title, status, priority, start_date, due_date, note, responsible, created_on, created_by, updated_on, updated_by, status_changed_on, status_changed_by, completed_on, completed_by, attachments_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.projectId,
@@ -1296,6 +1728,12 @@ async function saveProjectsDataWithoutSchema(
         task.responsible,
         toNullableDateTime(task.createdAt),
         task.createdBy || null,
+        toNullableDateTime(task.updatedAt),
+        task.updatedBy || null,
+        toNullableDateTime(task.statusChangedAt),
+        task.statusChangedBy || null,
+        toNullableDateTime(task.completedAt),
+        task.completedBy || null,
         JSON.stringify(task.attachments),
       ]
     );
@@ -1389,6 +1827,26 @@ async function saveProjectsDataWithoutSchema(
     );
   }
 
+  for (const log of data.activityLogs) {
+    await queryable.execute(
+      `INSERT INTO project_activity_logs
+        (id, project_id, entity_type, entity_id, action, actor_user_id, actor_name, message, meta_json, occurred_on)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        log.id,
+        log.projectId,
+        log.entityType,
+        log.entityId,
+        log.action,
+        log.actorUserId,
+        log.actorName,
+        log.message,
+        JSON.stringify(log.meta),
+        toNullableDateTime(log.occurredAt),
+      ]
+    );
+  }
+
   return data;
 }
 
@@ -1430,6 +1888,12 @@ export async function getProjectsData(): Promise<ProjectsData> {
       responsible,
       created_on AS createdAt,
       created_by AS createdBy,
+      updated_on AS updatedAt,
+      updated_by AS updatedBy,
+      status_changed_on AS statusChangedAt,
+      status_changed_by AS statusChangedBy,
+      completed_on AS completedAt,
+      completed_by AS completedBy,
       attachments_json AS attachmentsJson
      FROM tasks
      ORDER BY created_at ASC`
@@ -1508,6 +1972,21 @@ export async function getProjectsData(): Promise<ProjectsData> {
      FROM project_access
      ORDER BY created_at ASC`
   );
+  const [activityLogRows] = await pool.query<RowDataPacket[]>(
+    `SELECT
+      id,
+      project_id AS projectId,
+      entity_type AS entityType,
+      entity_id AS entityId,
+      action,
+      actor_user_id AS actorUserId,
+      actor_name AS actorName,
+      message,
+      meta_json AS metaJson,
+      occurred_on AS occurredAt
+     FROM project_activity_logs
+     ORDER BY occurred_on DESC, created_at DESC`
+  );
 
   const data = normalizeProjectsData({
     projects: projectRows.map((row) => ({
@@ -1542,6 +2021,14 @@ export async function getProjectsData(): Promise<ProjectsData> {
       responsible: String(row.responsible ?? ""),
       createdAt: typeof row.createdAt === "string" ? String(row.createdAt) : "",
       createdBy: String(row.createdBy ?? ""),
+      updatedAt: typeof row.updatedAt === "string" ? String(row.updatedAt) : "",
+      updatedBy: String(row.updatedBy ?? ""),
+      statusChangedAt:
+        typeof row.statusChangedAt === "string" ? String(row.statusChangedAt) : "",
+      statusChangedBy: String(row.statusChangedBy ?? ""),
+      completedAt:
+        typeof row.completedAt === "string" ? String(row.completedAt) : "",
+      completedBy: String(row.completedBy ?? ""),
       attachments: (() => {
         try {
           const parsed = JSON.parse(String(row.attachmentsJson ?? "[]"));
@@ -1629,6 +2116,27 @@ export async function getProjectsData(): Promise<ProjectsData> {
     projectAccess: accessRows.map((row) => ({
       userId: String(row.userId),
       projectId: String(row.projectId),
+    })),
+    activityLogs: activityLogRows.map((row) => ({
+      id: String(row.id),
+      projectId: String(row.projectId),
+      entityType: row.entityType === "task" ? "task" : "task",
+      entityId: String(row.entityId),
+      action: String(row.action) as ProjectActivityLog["action"],
+      actorUserId: String(row.actorUserId),
+      actorName: String(row.actorName),
+      message: String(row.message),
+      meta: (() => {
+        try {
+          const parsed = JSON.parse(String(row.metaJson ?? "{}"));
+          return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+            ? (parsed as Record<string, unknown>)
+            : {};
+        } catch {
+          return {};
+        }
+      })(),
+      occurredAt: typeof row.occurredAt === "string" ? String(row.occurredAt) : "",
     })),
     updatedAt: new Date().toISOString(),
   });
@@ -1750,6 +2258,9 @@ function filterProjectsDataForUser(
     ),
     teamUsers: includeTeam ? data.teamUsers : [],
     projectAccess: includeTeam ? data.projectAccess : [],
+    activityLogs: data.activityLogs.filter((log) =>
+      allowedProjectIds.has(log.projectId)
+    ),
   };
 }
 
@@ -1793,22 +2304,29 @@ export async function saveProjectsDataForUser(
   input: Partial<ProjectsData>,
   user: CurrentProjectUser
 ): Promise<ProjectsData> {
-  if (user.role === "super_admin") {
-    return saveProjectsData(input);
-  }
-
   const currentData = await getProjectsData();
-  const allowedProjectIds = await getAccessibleProjectIds(user);
   const incomingData = normalizeProjectsData({
     ...input,
-    teamUsers: currentData.teamUsers,
-    projectAccess: currentData.projectAccess,
+    activityLogs: currentData.activityLogs,
+    teamUsers: user.role === "super_admin" ? input.teamUsers : currentData.teamUsers,
+    projectAccess:
+      user.role === "super_admin" ? input.projectAccess : currentData.projectAccess,
   });
+
+  if (user.role === "super_admin") {
+    const auditedData = applyTaskAuditTrail(currentData, {
+      ...incomingData,
+      updatedAt: new Date().toISOString(),
+    }, user);
+    return saveProjectsData(auditedData);
+  }
+
+  const allowedProjectIds = await getAccessibleProjectIds(user);
 
   const incomingProjectsById = new Map(
     incomingData.projects.map((project) => [project.id, project])
   );
-  const mergedData: ProjectsData = {
+  const mergedData = applyTaskAuditTrail(currentData, {
     ...currentData,
     projects: currentData.projects.map((project) =>
       allowedProjectIds.has(project.id) && incomingProjectsById.has(project.id)
@@ -1852,8 +2370,9 @@ export async function saveProjectsDataForUser(
     ),
     teamUsers: currentData.teamUsers,
     projectAccess: currentData.projectAccess,
+    activityLogs: currentData.activityLogs,
     updatedAt: new Date().toISOString(),
-  };
+  }, user);
 
   const savedData = await saveProjectsData(mergedData);
   return filterProjectsDataForUser(savedData, allowedProjectIds, false);

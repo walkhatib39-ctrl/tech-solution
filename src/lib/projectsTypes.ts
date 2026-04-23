@@ -72,6 +72,12 @@ export interface ManagedTask {
   responsible: string;
   createdAt: string;
   createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  statusChangedAt: string;
+  statusChangedBy: string;
+  completedAt: string;
+  completedBy: string;
   attachments: TaskAttachment[];
 }
 
@@ -157,6 +163,25 @@ export interface ProjectAccess {
   projectId: string;
 }
 
+export interface ProjectActivityLog {
+  id: string;
+  projectId: string;
+  entityType: "task";
+  entityId: string;
+  action:
+    | "created"
+    | "updated"
+    | "deleted"
+    | "status_changed"
+    | "assigned"
+    | "unassigned";
+  actorUserId: string;
+  actorName: string;
+  message: string;
+  occurredAt: string;
+  meta: Record<string, unknown>;
+}
+
 export interface CurrentProjectUser {
   id: string;
   name: string;
@@ -176,5 +201,6 @@ export interface ProjectsData {
   interventions: ProjectIntervention[];
   teamUsers: ProjectTeamUser[];
   projectAccess: ProjectAccess[];
+  activityLogs: ProjectActivityLog[];
   updatedAt: string;
 }

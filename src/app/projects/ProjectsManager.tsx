@@ -46,6 +46,7 @@ import {
   InterventionStatus,
   ManagedProject,
   ManagedTask,
+  ProjectActivityLog,
   ProjectDocFile,
   ProjectDocFolder,
   ProjectIntervention,
@@ -77,7 +78,7 @@ type PendingTaskFile = { file: File; id: string; previewUrl: string | null };
 
 const EMPTY_DATA: ProjectsData = {
   projects: [], taskSections: [], tasks: [], docFolders: [], docFiles: [],
-  trackingFields: [], updates: [], interventions: [], teamUsers: [], projectAccess: [], updatedAt: "",
+  trackingFields: [], updates: [], interventions: [], teamUsers: [], projectAccess: [], activityLogs: [], updatedAt: "",
 };
 
 // ─── Style maps ─────────────────────────────────────────────────────────────
@@ -158,7 +159,10 @@ function getPriorityWeight(p: TaskPriority) {
 
 function buildBlankTask(projectId: string): Omit<ManagedTask, "id"> {
   return { title: "", projectId, status: "À faire", priority: "Moyenne",
-           sectionId: null, startDate: "", dueDate: "", note: "", responsible: "", createdAt: "", createdBy: "", attachments: [] };
+           sectionId: null, startDate: "", dueDate: "", note: "", responsible: "",
+           createdAt: "", createdBy: "", updatedAt: "", updatedBy: "",
+           statusChangedAt: "", statusChangedBy: "", completedAt: "", completedBy: "",
+           attachments: [] };
 }
 
 function buildBlankIntervention(projectId: string): Omit<ProjectIntervention, "id"> {
@@ -265,6 +269,18 @@ function formatTaskLongDate(value: string) {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+  }).format(date);
+}
+
+function formatProjectDateTime(value: string) {
+  const date = parseProjectDate(value);
+  if (!date) return "";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(date);
 }
 
@@ -454,6 +470,19 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const trackingFields   = useMemo(() => !selectedProject ? [] : data.trackingFields.filter((f) => f.projectId === selectedProject.id).sort((a, b) => a.position - b.position), [data.trackingFields, selectedProject]);
   const projectUpdates   = useMemo(() => !selectedProject ? [] : data.updates.filter((u) => u.projectId === selectedProject.id), [data.updates, selectedProject]);
   const projectInterventions = useMemo(() => !selectedProject ? [] : data.interventions.filter((intervention) => intervention.projectId === selectedProject.id), [data.interventions, selectedProject]);
+  const projectActivityLogs = useMemo(
+    () =>
+      !selectedProject
+        ? []
+        : data.activityLogs
+            .filter((log) => log.projectId === selectedProject.id)
+            .sort(
+              (a, b) =>
+                new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+            )
+            .slice(0, 8),
+    [data.activityLogs, selectedProject]
+  );
   const previewTask = useMemo(
     () => projectTasks.find((task) => task.id === previewTaskId) ?? null,
     [previewTaskId, projectTasks]
@@ -554,16 +583,36 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const handleSaveTask = (draft: Omit<ManagedTask, "id">, taskId?: string) => {
     if (!draft.title.trim()) return;
     const existingTask = taskId ? data.tasks.find((task) => task.id === taskId) : null;
+    const now = new Date().toISOString();
+    const statusChanged = existingTask ? existingTask.status !== draft.status : true;
     const savedTask: ManagedTask = {
       ...draft,
       id: taskId ?? createId("task"),
       title: draft.title.trim(),
       createdAt: existingTask
         ? existingTask.createdAt || draft.createdAt || ""
-        : draft.createdAt || new Date().toISOString(),
+        : draft.createdAt || now,
       createdBy: existingTask
         ? existingTask.createdBy || draft.createdBy || ""
         : draft.createdBy || currentUser.name,
+      updatedAt: existingTask ? now : draft.updatedAt || now,
+      updatedBy: currentUser.name,
+      statusChangedAt: statusChanged
+        ? now
+        : existingTask?.statusChangedAt || draft.statusChangedAt || "",
+      statusChangedBy: statusChanged
+        ? currentUser.name
+        : existingTask?.statusChangedBy || draft.statusChangedBy || "",
+      completedAt: draft.status === "Terminé"
+        ? statusChanged
+          ? now
+          : existingTask?.completedAt || draft.completedAt || ""
+        : "",
+      completedBy: draft.status === "Terminé"
+        ? statusChanged
+          ? currentUser.name
+          : existingTask?.completedBy || draft.completedBy || ""
+        : "",
     };
     if (taskId) {
       updateData((c) => ({ ...c, tasks: c.tasks.map((t) => t.id === taskId ? savedTask : t) }));
@@ -583,7 +632,22 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     }
     updateData((c) => ({ ...c, tasks: c.tasks.filter((t) => t.id !== id) }));
   };
-  const handleChangeTaskStatus  = (id: string, status: TaskStatus) => updateData((c) => ({ ...c, tasks: c.tasks.map((t) => t.id === id ? { ...t, status } : t) }));
+  const handleChangeTaskStatus  = (id: string, status: TaskStatus) => updateData((c) => {
+    const now = new Date().toISOString();
+    return {
+      ...c,
+      tasks: c.tasks.map((t) => t.id === id ? {
+        ...t,
+        status,
+        updatedAt: now,
+        updatedBy: currentUser.name,
+        statusChangedAt: now,
+        statusChangedBy: currentUser.name,
+        completedAt: status === "Terminé" ? now : "",
+        completedBy: status === "Terminé" ? currentUser.name : "",
+      } : t),
+    };
+  });
   const handleAddTaskSection    = (pid: string, name: string) => {
     if (!name.trim()) return;
     const position = projectSections.length;
@@ -1045,7 +1109,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               )}
 
               {/* ── Tab content ── */}
-              {activeTab === "Pilotage" && <PilotageTab nextActionTasks={nextActionTasks} blockedTasks={blockedTasks} project={selectedProject} stats={stats} />}
+              {activeTab === "Pilotage" && <PilotageTab activityLogs={projectActivityLogs} nextActionTasks={nextActionTasks} blockedTasks={blockedTasks} project={selectedProject} stats={stats} />}
               {activeTab === "Tâches"   && (
                 isTaskEditorOpen ? (
                   <TaskEditorPage
@@ -1103,7 +1167,8 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 // ── PILOTAGE TAB ────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
+function PilotageTab({ activityLogs, nextActionTasks, blockedTasks, project, stats }: {
+  activityLogs: ProjectActivityLog[];
   nextActionTasks: ManagedTask[];
   blockedTasks: ManagedTask[];
   project: ManagedProject;
@@ -1186,15 +1251,45 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
               </div>
             ))}
           </div>
+          <div className="mt-4 border-t border-[var(--tsp-border)] pt-3 text-[12px] text-[var(--tsp-text-secondary)]">
+            Dernière mise à jour projet : {project.lastUpdate || "Non renseignée"}
+          </div>
         </div>
 
-        {/* Last update */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm shadow-slate-100/80">
-          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-            <Calendar className="h-3.5 w-3.5" /> Dernière mise à jour
+        <div className="projects-surface p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Clock3 className="h-4 w-4 text-[var(--tsp-navy)]" />
+            <h3 className="text-[17px] font-bold text-[var(--tsp-text)]">Activité récente</h3>
+            {activityLogs.length > 0 && (
+              <span className="ml-auto rounded-md bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                {activityLogs.length}
+              </span>
+            )}
           </div>
-          <p className="text-sm font-medium text-slate-600">{project.lastUpdate || "Non renseignée"}</p>
+          <div className="space-y-2">
+            {activityLogs.length > 0 ? (
+              activityLogs.map((log) => <ActivityLogItem key={log.id} log={log} />)
+            ) : (
+              <EmptyState label="Aucune activité récente" />
+            )}
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ActivityLogItem({ log }: { log: ProjectActivityLog }) {
+  return (
+    <div className="projects-surface-soft flex items-start gap-3 px-3 py-3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--tsp-navy)] text-[11px] font-bold text-white">
+        {getUserInitials(log.actorName)}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] leading-[1.5] text-[var(--tsp-text)]">{log.message}</p>
+        <p className="mt-1 text-[11px] text-[var(--tsp-text-secondary)]">
+          {formatProjectDateTime(log.occurredAt)}
+        </p>
       </div>
     </div>
   );
