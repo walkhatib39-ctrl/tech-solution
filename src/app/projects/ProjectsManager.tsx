@@ -772,7 +772,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               <button onClick={() => void loadData()} className="projects-btn-primary px-5 py-2 text-sm font-semibold">Réessayer</button>
             </div>
           ) : workspaceView === "team" && isSuperAdmin ? (
-            <div className="projects-shell projects-shell-mobile-flat rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
+            <div className="projects-shell !rounded-none !border-x-0 !border-t-0 sm:!rounded-[20px] sm:!border-x sm:!border-t">
               <div className="border-b border-[var(--tsp-border)] bg-[var(--tsp-navy)] px-4 py-4 text-white sm:px-5 sm:py-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start justify-between gap-3 sm:hidden">
@@ -823,7 +823,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               />
             </div>
           ) : selectedProject ? (
-            <div className="projects-shell projects-shell-mobile-flat rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
+            <div className="projects-shell !rounded-none !border-x-0 !border-t-0 sm:!rounded-[20px] sm:!border-x sm:!border-t">
 
               {/* ── Project header ── */}
               <div className="border-b border-white/[0.08] bg-[var(--tsp-navy)] px-4 pt-4 pb-0 text-white sm:px-5 sm:pt-5">

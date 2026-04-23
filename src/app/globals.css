@@ -714,15 +714,6 @@ p {
   overflow: hidden;
 }
 
-@media (max-width: 639px) {
-  .projects-shell-mobile-flat {
-    border-left: 0 !important;
-    border-radius: 0 !important;
-    border-right: 0 !important;
-    border-top: 0 !important;
-  }
-}
-
 .projects-surface {
   background: #fff;
   border: 0.5px solid var(--tsp-border);
