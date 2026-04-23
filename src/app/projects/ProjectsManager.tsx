@@ -26,6 +26,7 @@ import {
   LogOut,
   Mail,
   Menu,
+  Paperclip,
   Pencil,
   Plus,
   Save,
@@ -33,6 +34,7 @@ import {
   SlidersHorizontal,
   Trash2,
   TrendingUp,
+  Upload,
   User,
   Users,
   X,
@@ -51,6 +53,7 @@ import {
   ProjectTeamUser,
   ProjectUpdate,
   ProjectsData,
+  TaskAttachment,
   TASK_PRIORITIES,
   TASK_STATUSES,
   TRACKING_STATUSES,
@@ -70,6 +73,7 @@ type WorkspaceView = "project" | "team";
 type ProjectStats = { blocked: number; done: number; overdue: number; progress: number; total: number };
 type TaskSectionGroup = { id: string | null; color: string; name: string; tasks: ManagedTask[] };
 type InterventionDraft = Omit<ProjectIntervention, "id">;
+type PendingTaskFile = { file: File; id: string; previewUrl: string | null };
 
 const EMPTY_DATA: ProjectsData = {
   projects: [], taskSections: [], tasks: [], docFolders: [], docFiles: [],
@@ -153,7 +157,7 @@ function getPriorityWeight(p: TaskPriority) {
 
 function buildBlankTask(projectId: string): Omit<ManagedTask, "id"> {
   return { title: "", projectId, status: "À faire", priority: "Moyenne",
-           sectionId: null, startDate: "", dueDate: "", note: "", responsible: "" };
+           sectionId: null, startDate: "", dueDate: "", note: "", responsible: "", attachments: [] };
 }
 
 function buildBlankIntervention(projectId: string): Omit<ProjectIntervention, "id"> {
@@ -178,6 +182,29 @@ function parsePrice(value: string) {
   const normalized = value.replace(",", ".").trim();
   const price = Number(normalized);
   return Number.isFinite(price) ? Math.max(0, Math.round(price * 100) / 100) : 0;
+}
+
+function isImageAttachmentMimeType(mimeType: string) {
+  return mimeType.startsWith("image/");
+}
+
+function formatAttachmentSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readFilePreviewDataUrl(file: File) {
+  if (!isImageAttachmentMimeType(file.type)) {
+    return Promise.resolve<string | null>(null);
+  }
+
+  return new Promise<string | null>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
 }
 
 function formatCurrency(value: number) {
@@ -878,12 +905,14 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     </div>
                   </div>
                   {/* Stats row */}
-                  <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-3 lg:justify-end">
-                    <StatPill label="Total"     value={stats.total}   color="slate"   icon={<Columns3    className="h-3.5 w-3.5" />} />
-                    <StatPill label="Terminées" value={stats.done}    color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
-                    <StatPill label="Bloquées"  value={stats.blocked} color="red"     icon={<AlertCircle className="h-3.5 w-3.5" />} />
-                    <StatPill label="En retard" value={stats.overdue} color="amber"   icon={<Clock3      className="h-3.5 w-3.5" />} />
-                  </div>
+                  {!(activeTab === "Tâches" && isTaskEditorOpen) && (
+                    <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-3 lg:justify-end">
+                      <StatPill label="Total"     value={stats.total}   color="slate"   icon={<Columns3    className="h-3.5 w-3.5" />} />
+                      <StatPill label="Terminées" value={stats.done}    color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
+                      <StatPill label="Bloquées"  value={stats.blocked} color="red"     icon={<AlertCircle className="h-3.5 w-3.5" />} />
+                      <StatPill label="En retard" value={stats.overdue} color="amber"   icon={<Clock3      className="h-3.5 w-3.5" />} />
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
@@ -2575,6 +2604,9 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
   teamMembers: string[];
 }) {
   const [draft, setDraft] = useState<Omit<ManagedTask, "id">>(task ?? buildBlankTask(defaultProjectId));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<PendingTaskFile[]>([]);
+  const [uploadError, setUploadError] = useState("");
   const availableSections = useMemo(
     () => sections.filter((section) => section.projectId === draft.projectId).sort((a, b) => a.position - b.position || a.name.localeCompare(b.name)),
     [draft.projectId, sections]
@@ -2582,20 +2614,77 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
   const selectedSectionId = draft.sectionId && availableSections.some((section) => section.id === draft.sectionId)
     ? draft.sectionId
     : "";
-  const knownResponsibles = useMemo(
-    () => Array.from(new Set([...teamMembers, draft.responsible.trim()].filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [draft.responsible, teamMembers]
-  );
+  const knownResponsibles = useMemo(() => [...teamMembers].sort((a, b) => a.localeCompare(b)), [teamMembers]);
   const isEditing = Boolean(task);
+  const fileInputId = useMemo(() => `task-files-${createId("input")}`, []);
+
+  const handleFileSelection = useCallback(async (files: FileList | null) => {
+    if (!files?.length) return;
+
+    const nextFiles = await Promise.all(
+      Array.from(files).map(async (file) => ({
+        file,
+        id: createId("pending-file"),
+        previewUrl: await readFilePreviewDataUrl(file),
+      }))
+    );
+
+    setPendingFiles((current) => [...current, ...nextFiles]);
+    setUploadError("");
+  }, []);
+
+  const handleSubmit = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setUploadError("");
+
+    try {
+      let uploadedAttachments: TaskAttachment[] = [];
+
+      if (pendingFiles.length) {
+        const formData = new FormData();
+        formData.append("projectId", defaultProjectId);
+        pendingFiles.forEach((pendingFile) => formData.append("files", pendingFile.file));
+
+        const response = await fetch("/api/projects/tasks/upload", {
+          body: formData,
+          method: "POST",
+        });
+
+        const payload = (await response.json()) as {
+          attachments?: TaskAttachment[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Échec de l’envoi des pièces jointes.");
+        }
+
+        uploadedAttachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+      }
+
+      onSave(
+        {
+          ...draft,
+          projectId: defaultProjectId,
+          sectionId: selectedSectionId || null,
+          attachments: [...draft.attachments, ...uploadedAttachments],
+        },
+        task?.id
+      );
+      setPendingFiles([]);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Impossible d’envoyer les pièces jointes.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [defaultProjectId, draft, onSave, pendingFiles, selectedSectionId, task?.id]);
 
   return (
     <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)]">
       <form
         className="grid gap-4 p-3 sm:p-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSave({ ...draft, projectId: defaultProjectId, sectionId: selectedSectionId || null }, task?.id);
-        }}
+        onSubmit={handleSubmit}
       >
         <div className="space-y-4">
           <div className="projects-surface p-[14px] sm:p-5">
@@ -2610,7 +2699,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
                 </button>
                 <div className="min-w-0">
                   <p className="projects-label">Tâches</p>
-                  <h2 className="mt-1 text-[15px] font-bold text-[var(--tsp-text)]">{isEditing ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
+                  <h2 className="mt-1 text-[14px] font-bold text-[var(--tsp-text)]">{isEditing ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
                 </div>
               </div>
               <span className="hidden rounded-md bg-[var(--tsp-bg-surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)] sm:inline-flex">
@@ -2628,14 +2717,6 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
               onChange={(e) => setDraft((current) => ({ ...current, title: e.target.value }))}
               placeholder="Ex : Optimiser les pages département IDF"
               value={draft.title}
-            />
-
-            <label className="projects-label mb-2 mt-4 block">Détails</label>
-            <textarea
-              className="min-h-[180px] w-full resize-y p-3 text-[13px] leading-[1.5]"
-              onChange={(e) => setDraft((current) => ({ ...current, note: e.target.value }))}
-              placeholder="Contexte, ressources, points d’attention, blocage, prochaine action…"
-              value={draft.note}
             />
           </div>
 
@@ -2752,6 +2833,73 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
           </div>
 
           <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="projects-label mb-1 flex items-center gap-1.5"><Paperclip className="h-3.5 w-3.5" />Pièces jointes</p>
+                <p className="text-[12px] text-[var(--tsp-text-secondary)]">PDF, DOC, DOCX, JPG, PNG, WEBP.</p>
+              </div>
+              <label className="projects-btn-secondary inline-flex h-10 cursor-pointer items-center gap-2 px-3 text-[12px] font-semibold">
+                <Upload className="h-3.5 w-3.5" />
+                Ajouter
+                <input
+                  accept=".pdf,.doc,.docx,image/png,image/jpeg,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  id={fileInputId}
+                  multiple
+                  onChange={async (event) => {
+                    await handleFileSelection(event.target.files);
+                    event.currentTarget.value = "";
+                  }}
+                  type="file"
+                />
+              </label>
+            </div>
+
+            {uploadError ? (
+              <p className="mt-3 rounded-[10px] bg-[#fef2f2] px-3 py-2 text-[12px] font-medium text-[#dc2626]">
+                {uploadError}
+              </p>
+            ) : null}
+
+            {!!(draft.attachments.length || pendingFiles.length) ? (
+              <div className="mt-4 space-y-2">
+                {draft.attachments.map((attachment) => (
+                  <TaskAttachmentCard
+                    key={attachment.path}
+                    attachment={attachment}
+                    onRemove={() =>
+                      setDraft((current) => ({
+                        ...current,
+                        attachments: current.attachments.filter((item) => item.path !== attachment.path),
+                      }))
+                    }
+                  />
+                ))}
+                {pendingFiles.map((pendingFile) => (
+                  <TaskAttachmentCard
+                    key={pendingFile.id}
+                    attachment={{
+                      mimeType: pendingFile.file.type,
+                      name: pendingFile.file.name,
+                      path: pendingFile.previewUrl || "",
+                      size: pendingFile.file.size,
+                    }}
+                    isPending
+                    onRemove={() =>
+                      setPendingFiles((current) => current.filter((item) => item.id !== pendingFile.id))
+                    }
+                    previewOverride={pendingFile.previewUrl}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="projects-surface-soft mt-4 px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                Aucune pièce jointe pour cette tâche.
+              </div>
+            )}
+          </div>
+
+          <div className="projects-surface p-[14px] sm:p-5">
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <button
                 className="projects-btn-secondary h-11 flex-1 text-[13px] font-semibold"
@@ -2762,9 +2910,10 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
               </button>
               <button
                 className="projects-btn-primary h-11 flex-1 text-[13px] font-semibold"
+                disabled={isSubmitting}
                 type="submit"
               >
-                {isEditing ? "Enregistrer les changements" : "Créer la tâche"}
+                {isSubmitting ? "Envoi..." : isEditing ? "Enregistrer les changements" : "Créer la tâche"}
               </button>
             </div>
           </div>
@@ -2779,5 +2928,49 @@ function FieldSelect({ children, onChange, value }: { children: React.ReactNode;
     <select className="h-11 w-full px-3 text-[13px]" onChange={(e) => onChange(e.target.value)} value={value}>
       {children}
     </select>
+  );
+}
+
+function TaskAttachmentCard({
+  attachment,
+  isPending,
+  onRemove,
+  previewOverride,
+}: {
+  attachment: TaskAttachment;
+  isPending?: boolean;
+  onRemove: () => void;
+  previewOverride?: string | null;
+}) {
+  const previewSrc = previewOverride || attachment.path;
+  const isImage = isImageAttachmentMimeType(attachment.mimeType);
+
+  return (
+    <div className="projects-surface-soft flex items-center gap-3 px-3 py-3">
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
+        {isImage && previewSrc ? (
+          <Image alt={attachment.name} className="object-cover" fill sizes="48px" src={previewSrc} />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[var(--tsp-text-secondary)]">
+            <FileText className="h-5 w-5" />
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[12px] font-semibold text-[var(--tsp-text)]">{attachment.name}</p>
+        <p className="mt-0.5 text-[11px] text-[var(--tsp-text-secondary)]">
+          {formatAttachmentSize(attachment.size)}{isPending ? " · en attente" : ""}
+        </p>
+      </div>
+
+      <button
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[var(--tsp-border)] text-[var(--tsp-text-secondary)] transition hover:bg-white"
+        onClick={onRemove}
+        type="button"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 }

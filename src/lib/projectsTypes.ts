@@ -70,6 +70,14 @@ export interface ManagedTask {
   dueDate: string;
   note: string;
   responsible: string;
+  attachments: TaskAttachment[];
+}
+
+export interface TaskAttachment {
+  name: string;
+  path: string;
+  mimeType: string;
+  size: number;
 }
 
 export interface TaskSection {

@@ -20,6 +20,7 @@ import {
   ProjectTeamUser,
   ProjectUpdate,
   ProjectsData,
+  TaskAttachment,
   TASK_PRIORITIES,
   TASK_STATUSES,
   TRACKING_STATUSES,
@@ -315,6 +316,30 @@ function normalizeTask(task: Partial<ManagedTask>): ManagedTask | null {
     dueDate: typeof task.dueDate === "string" ? task.dueDate : "",
     note: typeof task.note === "string" ? task.note : "",
     responsible: typeof task.responsible === "string" ? task.responsible : "",
+    attachments: Array.isArray(task.attachments)
+      ? task.attachments
+          .map((attachment) => normalizeTaskAttachment(attachment))
+          .filter((attachment): attachment is TaskAttachment => Boolean(attachment))
+      : [],
+  };
+}
+
+function normalizeTaskAttachment(attachment: Partial<TaskAttachment>): TaskAttachment | null {
+  if (
+    !attachment ||
+    typeof attachment.name !== "string" ||
+    !attachment.name.trim() ||
+    typeof attachment.path !== "string" ||
+    !attachment.path.trim()
+  ) {
+    return null;
+  }
+
+  return {
+    name: attachment.name.trim(),
+    path: attachment.path.trim(),
+    mimeType: typeof attachment.mimeType === "string" ? attachment.mimeType.trim() : "",
+    size: Number.isFinite(Number(attachment.size)) ? Math.max(0, Number(attachment.size)) : 0,
   };
 }
 
@@ -836,6 +861,7 @@ async function ensureProjectsSchema() {
         due_date DATE NULL,
         note TEXT NULL,
         responsible VARCHAR(190) NULL,
+        attachments_json LONGTEXT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_tasks_project (project_id),
@@ -859,6 +885,21 @@ async function ensureProjectsSchema() {
         ALTER TABLE tasks
           ADD COLUMN section_id VARCHAR(120) NULL AFTER project_id,
           ADD INDEX idx_tasks_section (section_id)
+      `);
+    }
+
+    const [taskAttachmentsColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'attachments_json'`
+    );
+
+    if (taskAttachmentsColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN attachments_json LONGTEXT NULL AFTER responsible
       `);
     }
 
@@ -1184,8 +1225,8 @@ async function saveProjectsDataWithoutSchema(
   for (const task of data.tasks) {
     await queryable.execute(
       `INSERT INTO tasks
-        (id, project_id, section_id, title, status, priority, start_date, due_date, note, responsible)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, section_id, title, status, priority, start_date, due_date, note, responsible, attachments_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.projectId,
@@ -1197,6 +1238,7 @@ async function saveProjectsDataWithoutSchema(
         toNullableDate(task.dueDate),
         task.note,
         task.responsible,
+        JSON.stringify(task.attachments),
       ]
     );
   }
@@ -1327,7 +1369,8 @@ export async function getProjectsData(): Promise<ProjectsData> {
       start_date AS startDate,
       due_date AS dueDate,
       note,
-      responsible
+      responsible,
+      attachments_json AS attachmentsJson
      FROM tasks
      ORDER BY created_at ASC`
   );
@@ -1437,6 +1480,22 @@ export async function getProjectsData(): Promise<ProjectsData> {
       dueDate: fromDate(row.dueDate),
       note: String(row.note ?? ""),
       responsible: String(row.responsible ?? ""),
+      attachments: (() => {
+        try {
+          const parsed = JSON.parse(String(row.attachmentsJson ?? "[]"));
+          return Array.isArray(parsed)
+            ? parsed
+                .map((attachment) =>
+                  normalizeTaskAttachment(
+                    typeof attachment === "object" && attachment ? (attachment as Partial<TaskAttachment>) : {}
+                  )
+                )
+                .filter((attachment): attachment is TaskAttachment => Boolean(attachment))
+            : [];
+        } catch {
+          return [];
+        }
+      })(),
     })),
     docFolders: folderRows.map((row) => ({
       id: String(row.id),
