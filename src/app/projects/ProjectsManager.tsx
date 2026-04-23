@@ -132,6 +132,7 @@ const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType; shortLab
 
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
 const PROJECT_TITLE_STYLE = { fontSize: "clamp(1rem, 0.92rem + 0.55vw, 1.35rem)", letterSpacing: 0 };
+const TASK_PANEL_TITLE_STYLE = { fontSize: "13px", letterSpacing: 0, lineHeight: 1.2 };
 
 // ─── Utility functions ───────────────────────────────────────────────────────
 
@@ -2667,7 +2668,14 @@ function TaskPreviewPage({
                 </button>
                 <div className="min-w-0">
                   <p className="projects-label">Tâches</p>
-                  <h2 className="mt-1 text-[14px] font-bold text-[var(--tsp-text)]">Aperçu de la tâche</h2>
+                  <div
+                    aria-level={2}
+                    className="mt-1 font-bold text-[var(--tsp-text)]"
+                    role="heading"
+                    style={TASK_PANEL_TITLE_STYLE}
+                  >
+                    Aperçu de la tâche
+                  </div>
                   <p className="mt-2 text-[15px] font-semibold leading-[1.35] text-[var(--tsp-text)]">{task.title}</p>
                 </div>
               </div>
@@ -2883,7 +2891,14 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
                 </button>
                 <div className="min-w-0">
                   <p className="projects-label">Tâches</p>
-                  <h2 className="mt-1 text-[14px] font-bold text-[var(--tsp-text)]">{isEditing ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
+                  <div
+                    aria-level={2}
+                    className="mt-1 font-bold text-[var(--tsp-text)]"
+                    role="heading"
+                    style={TASK_PANEL_TITLE_STYLE}
+                  >
+                    {isEditing ? "Modifier la tâche" : "Nouvelle tâche"}
+                  </div>
                 </div>
               </div>
               <span className="hidden rounded-md bg-[var(--tsp-bg-surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)] sm:inline-flex">
