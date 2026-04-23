@@ -1,7 +1,9 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { AlertCircle, Lock, Mail } from "lucide-react";
+
+const WORKSPACE_SESSION_KEY = "techsolution-projects-workspace";
 
 export interface ProjectLoginState {
   error?: string;
@@ -25,6 +27,10 @@ export default function ProjectsLogin({
   const [state, formAction, isPending] = useActionState(loginAction, {});
   const isPasswordMissing =
     !passwordState.isConfigured && !passwordState.isUsingDevFallback;
+
+  useEffect(() => {
+    window.sessionStorage.removeItem(WORKSPACE_SESSION_KEY);
+  }, []);
 
   return (
     <div

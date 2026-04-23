@@ -27,6 +27,7 @@ import {
   LogOut,
   Mail,
   Menu,
+  House,
   Paperclip,
   Pencil,
   Plus,
@@ -71,11 +72,21 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 type StatusFilter = TaskStatus | "Tous";
 type ResponsibleFilter = string | "Tous";
 type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Interventions" | "Suivi";
-type WorkspaceView = "project" | "team";
+type WorkspaceView = "home" | "project" | "team";
 type ProjectStats = { blocked: number; done: number; overdue: number; progress: number; total: number };
 type TaskSectionGroup = { id: string | null; color: string; name: string; tasks: ManagedTask[] };
 type InterventionDraft = Omit<ProjectIntervention, "id">;
 type PendingTaskFile = { file: File; id: string; previewUrl: string | null };
+type PersistedWorkspaceState = {
+  activeTab: ProjectTab;
+  interventionMode: "edit" | "list" | "preview";
+  interventionTargetId: string;
+  selectedDocFileId: string;
+  selectedProjectId: string;
+  taskMode: "edit" | "list" | "preview";
+  taskTargetId: string;
+  workspaceView: WorkspaceView;
+};
 
 const EMPTY_DATA: ProjectsData = {
   projects: [], taskSections: [], tasks: [], docFolders: [], docFiles: [],
@@ -134,6 +145,7 @@ const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType; shortLab
 
 const PROJECT_BASE_TABS: ProjectTab[] = ["Pilotage", "Tâches", "Docs"];
 const WE_CLEANED_PROJECT_ID = "project-wecleaned";
+const WORKSPACE_SESSION_KEY = "techsolution-projects-workspace";
 
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
 const PROJECT_TITLE_STYLE = { fontSize: "clamp(1rem, 0.92rem + 0.55vw, 1.35rem)", letterSpacing: 0 };
@@ -398,7 +410,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [data, setData] = useState<ProjectsData>(EMPTY_DATA);
   const [currentUser, setCurrentUser] = useState<CurrentProjectUser>(initialUser);
   const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("project");
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("home");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ProjectTab>("Pilotage");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("Tous");
@@ -420,6 +432,8 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [isProjectDeleteConfirmOpen, setIsProjectDeleteConfirmOpen] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didRestoreWorkspaceRef = useRef(false);
+  const skipProjectResetRef = useRef(false);
   const isSuperAdmin = currentUser.role === "super_admin";
 
   const persistData = useCallback((nextData: ProjectsData) => {
@@ -458,7 +472,6 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       const p = (await r.json()) as { currentUser: CurrentProjectUser; data: ProjectsData; success: boolean };
       setData(p.data);
       setCurrentUser(p.currentUser);
-      setSelectedProjectId(p.data.projects[0]?.id ?? "");
       setSaveState("saved");
     } catch (e) { console.error(e); setLoadError("Impossible de charger les projets."); }
     finally { setIsLoading(false); }
@@ -470,13 +483,14 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   }, [loadData]);
 
   useEffect(() => {
+    if (!didRestoreWorkspaceRef.current) return;
     if (!data.projects.some((p) => p.id === selectedProjectId))
       setSelectedProjectId(data.projects[0]?.id ?? "");
   }, [data.projects, selectedProjectId]);
 
   useEffect(() => {
     if (!isSuperAdmin && workspaceView === "team") {
-      setWorkspaceView("project");
+      setWorkspaceView("home");
     }
   }, [isSuperAdmin, workspaceView]);
 
@@ -595,10 +609,133 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   }, [activeTab, enabledProjectTabs]);
 
   useEffect(() => {
+    if (skipProjectResetRef.current) {
+      skipProjectResetRef.current = false;
+      return;
+    }
+    setEditingTask(null);
+    setIsTaskEditorOpen(false);
+    setPreviewTaskId("");
     setIsInterventionEditorOpen(false);
     setEditingIntervention(null);
     setPreviewInterventionId("");
+    setSelectedDocFileId("");
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (isLoading || didRestoreWorkspaceRef.current) return;
+
+    didRestoreWorkspaceRef.current = true;
+
+    const defaultProjectId = data.projects[0]?.id ?? "";
+    const raw = window.sessionStorage.getItem(WORKSPACE_SESSION_KEY);
+
+    if (!raw) {
+      setWorkspaceView("home");
+      setSelectedProjectId(defaultProjectId);
+      return;
+    }
+
+    try {
+      const persisted = JSON.parse(raw) as Partial<PersistedWorkspaceState>;
+      const validProjectId =
+        typeof persisted.selectedProjectId === "string" &&
+        data.projects.some((project) => project.id === persisted.selectedProjectId)
+          ? persisted.selectedProjectId
+          : defaultProjectId;
+      const validTabs = getEnabledProjectTabs(validProjectId).map((tab) => tab.label);
+      const nextActiveTab =
+        typeof persisted.activeTab === "string" && validTabs.includes(persisted.activeTab as ProjectTab)
+          ? (persisted.activeTab as ProjectTab)
+          : "Pilotage";
+      const nextWorkspaceView: WorkspaceView =
+        persisted.workspaceView === "team"
+          ? isSuperAdmin
+            ? "team"
+            : "home"
+          : persisted.workspaceView === "project"
+            ? validProjectId
+              ? "project"
+              : "home"
+            : "home";
+
+      skipProjectResetRef.current = true;
+      setSelectedProjectId(validProjectId);
+      setWorkspaceView(nextWorkspaceView);
+      setActiveTab(nextActiveTab);
+      setSelectedDocFileId(
+        typeof persisted.selectedDocFileId === "string" ? persisted.selectedDocFileId : ""
+      );
+
+      if (nextWorkspaceView === "project" && nextActiveTab === "Tâches") {
+        if (persisted.taskMode === "preview" && typeof persisted.taskTargetId === "string") {
+          setPreviewTaskId(persisted.taskTargetId);
+        } else if (persisted.taskMode === "edit") {
+          setIsTaskEditorOpen(true);
+          if (persisted.taskTargetId && persisted.taskTargetId !== "new") {
+            const task = data.tasks.find((item) => item.id === persisted.taskTargetId);
+            setEditingTask(task ?? null);
+          } else {
+            setEditingTask(null);
+          }
+        }
+      }
+
+      if (nextWorkspaceView === "project" && nextActiveTab === "Interventions") {
+        if (persisted.interventionMode === "preview" && typeof persisted.interventionTargetId === "string") {
+          setPreviewInterventionId(persisted.interventionTargetId);
+        } else if (persisted.interventionMode === "edit") {
+          setIsInterventionEditorOpen(true);
+          if (persisted.interventionTargetId && persisted.interventionTargetId !== "new") {
+            const intervention = data.interventions.find(
+              (item) => item.id === persisted.interventionTargetId
+            );
+            setEditingIntervention(intervention ?? null);
+          } else {
+            setEditingIntervention(null);
+          }
+        }
+      }
+    } catch {
+      setWorkspaceView("home");
+      setSelectedProjectId(defaultProjectId);
+    }
+  }, [data.interventions, data.projects, data.tasks, isLoading, isSuperAdmin]);
+
+  useEffect(() => {
+    if (isLoading || !didRestoreWorkspaceRef.current) return;
+
+    const payload: PersistedWorkspaceState = {
+      activeTab,
+      interventionMode: isInterventionEditorOpen
+        ? "edit"
+        : previewInterventionId
+          ? "preview"
+          : "list",
+      interventionTargetId: isInterventionEditorOpen
+        ? editingIntervention?.id ?? "new"
+        : previewInterventionId,
+      selectedDocFileId,
+      selectedProjectId,
+      taskMode: isTaskEditorOpen ? "edit" : previewTaskId ? "preview" : "list",
+      taskTargetId: isTaskEditorOpen ? editingTask?.id ?? "new" : previewTaskId,
+      workspaceView,
+    };
+
+    window.sessionStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(payload));
+  }, [
+    activeTab,
+    editingIntervention?.id,
+    editingTask?.id,
+    isInterventionEditorOpen,
+    isLoading,
+    isTaskEditorOpen,
+    previewInterventionId,
+    previewTaskId,
+    selectedDocFileId,
+    selectedProjectId,
+    workspaceView,
+  ]);
 
   useEffect(() => {
     setIsProjectRenameOpen(false);
@@ -641,6 +778,16 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     setIsSidebarOpen(false);
     setProjectForm({ name: "", color: "#1e3a5f" });
     setShowAddProject(false);
+  };
+
+  const handleOpenProject = (projectId: string, tab: ProjectTab = "Pilotage") => {
+    const allowedTabs = getEnabledProjectTabs(projectId).map((item) => item.label);
+    const nextTab = allowedTabs.includes(tab) ? tab : "Pilotage";
+
+    setSelectedProjectId(projectId);
+    setWorkspaceView("project");
+    setActiveTab(nextTab);
+    setIsSidebarOpen(false);
   };
 
   const handleRenameProject = (e: React.FormEvent<HTMLFormElement>) => {
@@ -1013,6 +1160,24 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
         {/* Projects list */}
         <div className="flex-1 overflow-y-auto px-3 py-4">
+          <div className="mb-4">
+            <button
+              onClick={() => { setWorkspaceView("home"); setIsSidebarOpen(false); }}
+              type="button"
+              className={`flex w-full items-center gap-3 rounded-[10px] border border-transparent px-3 py-2.5 text-left transition ${workspaceView === "home" ? "bg-white text-[var(--tsp-text)]" : "bg-white/[0.05] text-white/[0.75] hover:bg-white/[0.08] hover:text-white"}`}
+            >
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${workspaceView === "home" ? "bg-[var(--tsp-bg-surface)] text-[var(--tsp-text)]" : "bg-white/[0.08] text-white/[0.75]"}`}>
+                <House className="h-4 w-4" />
+              </div>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold">Accueil</span>
+                <span className={`mt-0.5 block text-[11px] ${workspaceView === "home" ? "text-[var(--tsp-text-secondary)]" : "text-white/[0.45]"}`}>
+                  Vue générale des projets
+                </span>
+              </span>
+            </button>
+          </div>
+
           <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-white/[0.45]">
             Projets · {data.projects.length}
           </div>
@@ -1021,7 +1186,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               const isActive = workspaceView === "project" && selectedProject?.id === project.id;
               const projectTaskCount = data.tasks.filter((task) => task.projectId === project.id).length;
               return (
-                <button key={project.id} onClick={() => { setSelectedProjectId(project.id); setWorkspaceView("project"); setIsSidebarOpen(false); }} type="button"
+                <button key={project.id} onClick={() => handleOpenProject(project.id)} type="button"
                   className={`group flex w-full items-center gap-3 rounded-[10px] border border-transparent border-l-[3px] px-3 py-2.5 text-left transition-all ${isActive ? "bg-white text-[var(--tsp-text)]" : "bg-white/[0.05] text-white/[0.75] hover:bg-white/[0.08] hover:text-white"}`}
                   style={{
                     borderColor: isActive ? "var(--tsp-border)" : "transparent",
@@ -1123,6 +1288,13 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/30" />
                 <span className="font-medium text-white/[0.45]">Accès projets</span>
               </>
+            ) : workspaceView === "home" ? (
+              <>
+                <House className="h-4 w-4 shrink-0 text-white/[0.55]" />
+                <span className="truncate font-semibold text-white">Accueil</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                <span className="font-medium text-white/[0.45]">Vue générale</span>
+              </>
             ) : selectedProject && <>
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: selectedProject.color }} />
               <span className="truncate font-semibold text-white">{selectedProject.name}</span>
@@ -1146,6 +1318,56 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               <AlertCircle className="h-8 w-8 text-[var(--tsp-red)]" />
               <p className="font-semibold text-red-900">{loadError}</p>
               <button onClick={() => void loadData()} className="projects-btn-primary px-5 py-2 text-sm font-semibold">Réessayer</button>
+            </div>
+          ) : workspaceView === "home" ? (
+            <div className="projects-shell !rounded-none !border-x-0 !border-t-0 sm:!rounded-[20px] sm:!border-x sm:!border-t">
+              <div className="border-b border-[var(--tsp-border)] bg-[var(--tsp-navy)] px-4 py-4 text-white sm:px-5 sm:py-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start justify-between gap-3 sm:hidden">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white">
+                        <House className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div aria-level={1} role="heading" className="text-[17px] font-bold text-white">Accueil</div>
+                        <p className="mt-1 text-[12px] text-white/[0.45]">Ouvrez un projet ou reprenez votre travail.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 sm:hidden">
+                      <SaveBadge saveState={saveState} />
+                      <button
+                        aria-label="Ouvrir le menu"
+                        className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white"
+                        onClick={() => setIsSidebarOpen(true)}
+                        type="button"
+                      >
+                        <Menu className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="hidden items-start gap-3 sm:flex">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white">
+                      <House className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div aria-level={1} role="heading" className="text-[17px] font-bold text-white">Accueil</div>
+                      <p className="mt-1 text-[12px] text-white/[0.45]">Vue générale des projets et point d’entrée de l’espace interne.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3 lg:justify-end">
+                    <StatPill label="Projets" value={data.projects.length} color="slate" icon={<FolderKanban className="h-3.5 w-3.5" />} />
+                    <StatPill label="Tâches" value={data.tasks.length} color="emerald" icon={<Columns3 className="h-3.5 w-3.5" />} />
+                    <StatPill label="Bloquées" value={data.tasks.filter((task) => task.status === "Bloqué").length} color="red" icon={<AlertCircle className="h-3.5 w-3.5" />} />
+                  </div>
+                </div>
+              </div>
+              <HomeTab
+                activityLogs={data.activityLogs}
+                currentUser={currentUser}
+                onOpenProject={handleOpenProject}
+                projects={data.projects}
+                tasks={data.tasks}
+              />
             </div>
           ) : workspaceView === "team" && isSuperAdmin ? (
             <div className="projects-shell !rounded-none !border-x-0 !border-t-0 sm:!rounded-[20px] sm:!border-x sm:!border-t">
@@ -1510,6 +1732,173 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         </main>
       </div>
 
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ── HOME TAB ────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+
+function HomeTab({
+  activityLogs,
+  currentUser,
+  onOpenProject,
+  projects,
+  tasks,
+}: {
+  activityLogs: ProjectActivityLog[];
+  currentUser: CurrentProjectUser;
+  onOpenProject: (projectId: string, tab?: ProjectTab) => void;
+  projects: ManagedProject[];
+  tasks: ManagedTask[];
+}) {
+  const recentLogs = useMemo(
+    () =>
+      [...activityLogs]
+        .sort(
+          (a, b) =>
+            new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+        )
+        .slice(0, 6),
+    [activityLogs]
+  );
+
+  return (
+    <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] p-3 sm:p-5">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+        <div className="space-y-3">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <p className="projects-label">Bienvenue</p>
+            <p
+              className="mt-1 font-bold text-[var(--tsp-text)]"
+              style={{ fontSize: "17px", letterSpacing: 0, lineHeight: 1.25 }}
+            >
+              {currentUser.name}
+            </p>
+            <p className="mt-2 text-[13px] leading-[1.65] text-[var(--tsp-text-secondary)]">
+              Cet espace vous sert de point d’entrée. Ouvrez un projet pour continuer,
+              consultez les mouvements récents et reprenez rapidement le bon onglet.
+            </p>
+          </div>
+
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="projects-label">Mes projets</p>
+                <p className="mt-1 text-[13px] text-[var(--tsp-text-secondary)]">
+                  Tous les projets accessibles depuis cet espace.
+                </p>
+              </div>
+              <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                {projects.length}
+              </span>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {projects.map((project) => {
+                const projectTasks = tasks.filter((task) => task.projectId === project.id);
+                const doneTasks = projectTasks.filter((task) => task.status === "Terminé").length;
+                const blockedTasks = projectTasks.filter((task) => task.status === "Bloqué").length;
+                const progress = projectTasks.length ? Math.round((doneTasks / projectTasks.length) * 100) : 0;
+
+                return (
+                  <button
+                    key={project.id}
+                    className="projects-surface text-left transition hover:border-[color-mix(in_srgb,var(--tsp-text)_25%,white)]"
+                    onClick={() => onOpenProject(project.id)}
+                    type="button"
+                  >
+                    <div className="p-[14px]">
+                      <div className="flex items-start gap-3">
+                        <span
+                          className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: project.color }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-semibold text-[var(--tsp-text)]">
+                            {project.name}
+                          </p>
+                          <p className="mt-1 text-[12px] text-[var(--tsp-text-secondary)]">
+                            {projectTasks.length} tâche{projectTasks.length > 1 ? "s" : ""} · {doneTasks} terminée{doneTasks > 1 ? "s" : ""}
+                          </p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-[var(--tsp-text-secondary)]" />
+                      </div>
+
+                      <div className="mt-4 h-1 overflow-hidden rounded-[2px] bg-[var(--tsp-bg-surface)]">
+                        <div
+                          className="h-full rounded-[2px]"
+                          style={{
+                            backgroundColor: project.color,
+                            width: `${progress}%`,
+                          }}
+                        />
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                          Avancement {progress}%
+                        </span>
+                        {blockedTasks > 0 ? (
+                          <span className="rounded-md bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">
+                            {blockedTasks} bloquée{blockedTasks > 1 ? "s" : ""}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[17px] font-bold text-[var(--tsp-text)]">Activité récente</p>
+              <span className="rounded-md bg-[var(--tsp-bg-surface)] px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                {recentLogs.length}
+              </span>
+            </div>
+            <div className="mt-4 space-y-2">
+              {recentLogs.length ? (
+                recentLogs.map((log) => (
+                  <ActivityLogItem key={log.id} log={log} />
+                ))
+              ) : (
+                <div className="projects-surface-soft px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                  Aucune activité récente pour le moment.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="projects-surface p-[14px] sm:p-5">
+            <p className="projects-label">Accès rapide</p>
+            <div className="mt-3 grid gap-2">
+              {projects.slice(0, 4).map((project) => (
+                <button
+                  key={`${project.id}-quick`}
+                  className="projects-surface-soft flex items-center gap-3 px-3 py-3 text-left transition hover:bg-white"
+                  onClick={() => onOpenProject(project.id)}
+                  type="button"
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: project.color }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--tsp-text)]">
+                    {project.name}
+                  </span>
+                  <span className="text-[12px] text-[var(--tsp-text-secondary)]">Ouvrir</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
