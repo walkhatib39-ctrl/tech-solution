@@ -403,10 +403,24 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const trackingFields   = useMemo(() => !selectedProject ? [] : data.trackingFields.filter((f) => f.projectId === selectedProject.id).sort((a, b) => a.position - b.position), [data.trackingFields, selectedProject]);
   const projectUpdates   = useMemo(() => !selectedProject ? [] : data.updates.filter((u) => u.projectId === selectedProject.id), [data.updates, selectedProject]);
   const projectInterventions = useMemo(() => !selectedProject ? [] : data.interventions.filter((intervention) => intervention.projectId === selectedProject.id), [data.interventions, selectedProject]);
-  const teamMemberNames = useMemo(
-    () => Array.from(new Set(data.teamUsers.filter((user) => user.isActive).map((user) => user.name.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [data.teamUsers]
-  );
+  const projectMemberNames = useMemo(() => {
+    if (!selectedProject) return [];
+
+    const names = data.teamUsers
+      .filter(
+        (user) =>
+          user.isActive &&
+          data.projectAccess.some((access) => access.userId === user.id && access.projectId === selectedProject.id)
+      )
+      .map((user) => user.name.trim())
+      .filter(Boolean);
+
+    if (currentUser.role === "super_admin" && currentUser.isActive && currentUser.name.trim()) {
+      names.push(currentUser.name.trim());
+    }
+
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+  }, [currentUser, data.projectAccess, data.teamUsers, selectedProject]);
 
   const responsibleOptions = useMemo(() =>
     Array.from(new Set(projectTasks.map((t) => t.responsible.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -960,10 +974,9 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     defaultProjectId={selectedProject.id}
                     onClose={() => { setEditingTask(null); setIsTaskEditorOpen(false); }}
                     onSave={handleSaveTask}
-                    project={selectedProject}
                     sections={projectSections}
                     task={editingTask}
-                    teamMembers={teamMemberNames}
+                    teamMembers={projectMemberNames}
                   />
                 ) : (
                   <TachesTab groups={taskGroups} onChangeStatus={handleChangeTaskStatus} onDeleteSection={handleDeleteTaskSection} onDeleteTask={handleDeleteTask} onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }} />
@@ -2553,11 +2566,10 @@ function SaveBadge({ saveState }: { saveState: SaveState }) {
 // ── TASK EDITOR MODAL ───────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function TaskEditorPage({ defaultProjectId, onClose, onSave, project, sections, task, teamMembers }: {
+function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, teamMembers }: {
   defaultProjectId: string;
   onClose: () => void;
   onSave: (draft: Omit<ManagedTask, "id">, taskId?: string) => void;
-  project: ManagedProject;
   sections: TaskSection[];
   task: ManagedTask | null;
   teamMembers: string[];
@@ -2579,7 +2591,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, project, sections, 
   return (
     <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)]">
       <form
-        className="grid gap-4 p-3 sm:p-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]"
+        className="grid gap-4 p-3 sm:p-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]"
         onSubmit={(e) => {
           e.preventDefault();
           onSave({ ...draft, projectId: defaultProjectId, sectionId: selectedSectionId || null }, task?.id);
@@ -2598,10 +2610,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, project, sections, 
                 </button>
                 <div className="min-w-0">
                   <p className="projects-label">Tâches</p>
-                  <h2 className="mt-1 text-[17px] font-bold text-[var(--tsp-text)]">{isEditing ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
-                  <p className="mt-1 text-[13px] text-[var(--tsp-text-secondary)]">
-                    Vue dédiée pour structurer la tâche proprement, sans modal.
-                  </p>
+                  <h2 className="mt-1 text-[15px] font-bold text-[var(--tsp-text)]">{isEditing ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
                 </div>
               </div>
               <span className="hidden rounded-md bg-[var(--tsp-bg-surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)] sm:inline-flex">
@@ -2631,16 +2640,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, project, sections, 
           </div>
 
           <div className="projects-surface p-[14px] sm:p-5">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="projects-label mb-2 flex items-center gap-1.5"><User className="h-3.5 w-3.5" />Responsable</label>
-                <input
-                  className="h-11 w-full px-3 text-[13px]"
-                  onChange={(e) => setDraft((current) => ({ ...current, responsible: e.target.value }))}
-                  placeholder="Nom ou collaborateur"
-                  value={draft.responsible}
-                />
-              </div>
+            <div className="grid gap-3">
               <div>
                 <label className="projects-label mb-2 flex items-center gap-1.5"><Columns3 className="h-3.5 w-3.5" />Section</label>
                 <FieldSelect onChange={(value) => setDraft((current) => ({ ...current, sectionId: value || null }))} value={selectedSectionId}>
@@ -2648,93 +2648,97 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, project, sections, 
                   {availableSections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
                 </FieldSelect>
               </div>
-              <div>
-                <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date début</label>
-                <input
-                  type="date"
-                  className="h-11 w-full px-3 text-[13px]"
-                  onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))}
-                  value={draft.startDate}
-                />
-              </div>
-              <div>
-                <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date limite</label>
-                <input
-                  type="date"
-                  className="h-11 w-full px-3 text-[13px]"
-                  onChange={(e) => setDraft((current) => ({ ...current, dueDate: e.target.value }))}
-                  value={draft.dueDate}
-                />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date début</label>
+                  <input
+                    type="date"
+                    className="h-11 w-full px-3 text-[13px]"
+                    onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))}
+                    value={draft.startDate}
+                  />
+                </div>
+                <div>
+                  <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date limite</label>
+                  <input
+                    type="date"
+                    className="h-11 w-full px-3 text-[13px]"
+                    onChange={(e) => setDraft((current) => ({ ...current, dueDate: e.target.value }))}
+                    value={draft.dueDate}
+                  />
+                </div>
               </div>
             </div>
 
-            {!!knownResponsibles.length && (
-              <div className="mt-4">
-                <p className="projects-label mb-2">Responsables suggérés</p>
-                <div className="grid gap-2 sm:grid-cols-2">
+            <div className="mt-4">
+              <p className="projects-label mb-2 flex items-center gap-1.5"><User className="h-3.5 w-3.5" />Collaborateurs du projet</p>
+              {!!knownResponsibles.length ? (
+                <div className="grid grid-cols-2 gap-2">
                   {knownResponsibles.map((name) => {
                     const isSelected = draft.responsible.trim() === name;
                     return (
                       <button
                         key={name}
-                        className={`flex items-center gap-2 rounded-[10px] border px-3 py-2 text-left transition ${
+                        className={`flex items-center gap-2 rounded-[10px] border px-2.5 py-2 text-left transition ${
                           isSelected
                             ? "border-[var(--tsp-navy)] bg-[var(--tsp-navy)] text-white"
                             : "border-[var(--tsp-border)] bg-white text-[var(--tsp-text)]"
                         }`}
-                        onClick={() => setDraft((current) => ({ ...current, responsible: name }))}
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            responsible: current.responsible.trim() === name ? "" : name,
+                          }))
+                        }
                         type="button"
                       >
-                        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${isSelected ? "bg-white/15 text-white" : "bg-[var(--tsp-navy)] text-white"}`}>
+                        <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${isSelected ? "bg-white/15 text-white" : "bg-[var(--tsp-navy)] text-white"}`}>
                           {getUserInitials(name)}
                         </span>
-                        <span className={`truncate text-[13px] font-medium ${isSelected ? "text-white" : "text-[var(--tsp-text)]"}`}>{name}</span>
+                        <span className={`truncate text-[12px] font-medium ${isSelected ? "text-white" : "text-[var(--tsp-text)]"}`}>{name}</span>
                       </button>
                     );
                   })}
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="projects-surface-soft px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                  Aucun collaborateur n’est encore assigné à ce projet.
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="projects-surface p-[14px] sm:p-5">
-            <p className="projects-label mb-2">Projet</p>
-            <div className="projects-surface-soft flex items-center gap-3 px-3 py-3">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: project.color }} />
-              <span className="truncate text-[14px] font-semibold text-[var(--tsp-text)]">{project.name}</span>
-            </div>
-
-            <div className="mt-4">
-              <p className="projects-label mb-2">Priorité</p>
-              <div className="grid grid-cols-3 gap-2">
-                {TASK_PRIORITIES.map((priority) => {
-                  const active = draft.priority === priority;
-                  return (
-                    <button
-                      key={priority}
-                      className={`flex h-11 items-center justify-center gap-2 rounded-[10px] border text-[12px] font-semibold transition ${active ? PRIORITY_META[priority].cls : "border-[var(--tsp-border)] bg-white text-[var(--tsp-text-secondary)]"}`}
-                      onClick={() => setDraft((current) => ({ ...current, priority }))}
-                      type="button"
-                    >
-                      <span className={`h-2.5 w-2.5 rounded-full ${PRIORITY_META[priority].dot}`} />
-                      {priority}
-                    </button>
-                  );
-                })}
-              </div>
+            <p className="projects-label mb-2">Priorité</p>
+            <div className="grid grid-cols-3 gap-2">
+              {TASK_PRIORITIES.map((priority) => {
+                const active = draft.priority === priority;
+                return (
+                  <button
+                    key={priority}
+                    className={`flex h-10 items-center justify-center gap-2 rounded-[10px] border text-[11px] font-semibold transition ${active ? PRIORITY_META[priority].cls : "border-[var(--tsp-border)] bg-white text-[var(--tsp-text-secondary)]"}`}
+                    onClick={() => setDraft((current) => ({ ...current, priority }))}
+                    type="button"
+                  >
+                    <span className={`h-2.5 w-2.5 rounded-full ${PRIORITY_META[priority].dot}`} />
+                    {priority}
+                  </button>
+                );
+              })}
             </div>
 
             <div className="mt-4">
               <p className="projects-label mb-2">Statut initial</p>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2">
                 {TASK_STATUSES.map((status) => {
                   const active = draft.status === status;
                   return (
                     <button
                       key={status}
-                      className="flex h-11 items-center justify-center rounded-[10px] border text-[12px] font-semibold transition"
+                      className="flex h-10 items-center justify-center rounded-[10px] border text-[11px] font-semibold transition"
                       onClick={() => setDraft((current) => ({ ...current, status }))}
                       style={active ? STATUS_BADGE_STYLE[status] : { backgroundColor: "#ffffff", borderColor: "rgba(15, 30, 53, 0.11)", color: "#5a6a7e" }}
                       type="button"
@@ -2743,34 +2747,6 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, project, sections, 
                     </button>
                   );
                 })}
-              </div>
-            </div>
-          </div>
-
-          <div className="projects-surface p-[14px] sm:p-5">
-            <p className="projects-label mb-3">Résumé</p>
-            <div className="space-y-2">
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Section</span>
-                <span className="text-[13px] font-semibold text-[var(--tsp-text)]">
-                  {availableSections.find((section) => section.id === selectedSectionId)?.name ?? "Sans section"}
-                </span>
-              </div>
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Statut</span>
-                <span className="rounded-md px-2.5 py-1 text-[11px] font-semibold" style={STATUS_BADGE_STYLE[draft.status]}>
-                  {draft.status}
-                </span>
-              </div>
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Priorité</span>
-                <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${PRIORITY_META[draft.priority].cls}`}>
-                  {draft.priority}
-                </span>
-              </div>
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Responsable</span>
-                <span className="truncate text-[13px] font-semibold text-[var(--tsp-text)]">{draft.responsible || "Non assigné"}</span>
               </div>
             </div>
           </div>
