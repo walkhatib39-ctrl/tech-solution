@@ -642,3 +642,149 @@ p {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ─────────────────────────────────────────
+   Projects Theme
+   ───────────────────────────────────────── */
+.projects-theme {
+  --tsp-navy: #0f1e35;
+  --tsp-navy-hover: #1a2f4a;
+  --tsp-bg-page: #f8f5f0;
+  --tsp-bg-surface: #ede9e3;
+  --tsp-border: rgba(15, 30, 53, 0.11);
+  --tsp-text: #0f1e35;
+  --tsp-text-secondary: #5a6a7e;
+  --tsp-blue: #2563eb;
+  --tsp-green: #16a34a;
+  --tsp-amber: #d97706;
+  --tsp-red: #dc2626;
+  --font-projects-stack: var(--font-projects), system-ui, -apple-system, sans-serif;
+  color: var(--tsp-text);
+  font-family: var(--font-projects-stack);
+}
+
+.projects-theme,
+.projects-theme :where(button, input, textarea, select) {
+  font-family: var(--font-projects-stack);
+}
+
+.projects-theme :where(h1, h2, h3, h4, h5, h6) {
+  color: var(--tsp-text);
+  letter-spacing: 0;
+}
+
+.projects-theme p {
+  color: var(--tsp-text-secondary);
+  line-height: 1.5;
+}
+
+.projects-theme [class*="shadow"] {
+  box-shadow: none !important;
+}
+
+.projects-theme input:not([type="color"]):not([type="checkbox"]):not([type="radio"]),
+.projects-theme select,
+.projects-theme textarea {
+  background: #fff;
+  border-color: var(--tsp-border);
+  border-radius: 10px;
+  color: var(--tsp-text);
+}
+
+.projects-theme input::placeholder,
+.projects-theme textarea::placeholder {
+  color: color-mix(in srgb, var(--tsp-text-secondary) 60%, white);
+}
+
+.projects-theme :where(input, select, textarea):focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--tsp-navy) 28%, white);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--tsp-navy) 10%, white) !important;
+}
+
+.projects-app {
+  background: var(--tsp-bg-page);
+  color: var(--tsp-text);
+}
+
+.projects-shell {
+  background: #fff;
+  border: 0.5px solid var(--tsp-border);
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.projects-surface {
+  background: #fff;
+  border: 0.5px solid var(--tsp-border);
+  border-radius: 10px;
+}
+
+.projects-surface-soft {
+  background: var(--tsp-bg-surface);
+  border: 0.5px solid var(--tsp-border);
+  border-radius: 10px;
+}
+
+.projects-dark {
+  background: var(--tsp-navy);
+  color: #fff;
+}
+
+.projects-btn-primary {
+  background: var(--tsp-navy);
+  border: 0.5px solid transparent;
+  border-radius: 10px;
+  color: #fff;
+}
+
+.projects-btn-primary:hover {
+  background: var(--tsp-navy-hover);
+}
+
+.projects-btn-secondary {
+  background: #fff;
+  border: 0.5px solid var(--tsp-border);
+  border-radius: 10px;
+  color: var(--tsp-text);
+}
+
+.projects-btn-secondary:hover {
+  border-color: color-mix(in srgb, var(--tsp-text) 25%, white);
+}
+
+.projects-label {
+  color: var(--tsp-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.projects-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--tsp-navy);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.projects-sidebar {
+  background: var(--tsp-navy);
+  border-right: 0.5px solid rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.projects-kpi-dark {
+  background: rgba(255, 255, 255, 0.07);
+  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.projects-login-grid {
+  background-image:
+    linear-gradient(rgba(15, 30, 53, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 30, 53, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+}

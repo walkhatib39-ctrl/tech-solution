@@ -81,16 +81,16 @@ const EMPTY_DATA: ProjectsData = {
 // ─── Style maps ─────────────────────────────────────────────────────────────
 
 const PRIORITY_META: Record<TaskPriority, { cls: string; dot: string }> = {
-  Basse:   { cls: "bg-slate-100 text-slate-500", dot: "bg-slate-400" },
-  Moyenne: { cls: "bg-amber-50 text-amber-700",  dot: "bg-amber-400" },
-  Haute:   { cls: "bg-red-50 text-red-600",      dot: "bg-red-500"   },
+  Basse:   { cls: "bg-[#dcfce7] text-[#166534]", dot: "bg-[#16a34a]" },
+  Moyenne: { cls: "bg-[#fef3c7] text-[#92400e]", dot: "bg-[#d97706]" },
+  Haute:   { cls: "bg-[#fee2e2] text-[#991b1b]", dot: "bg-[#dc2626]" },
 };
 
 const STATUS_META: Record<TaskStatus, { badge: string; bar: string; dot: string }> = {
-  "À faire": { badge: "bg-slate-100 text-slate-500",  bar: "bg-slate-300",   dot: "bg-slate-400"  },
-  "En cours":{ badge: "bg-sky-50 text-sky-700",       bar: "bg-sky-400",     dot: "bg-sky-500"    },
-  "Bloqué":  { badge: "bg-red-50 text-red-600",       bar: "bg-red-400",     dot: "bg-red-500"    },
-  "Terminé": { badge: "bg-emerald-50 text-emerald-700",bar:"bg-emerald-400", dot: "bg-emerald-500"},
+  "À faire": { badge: "bg-[#ede9e3] text-[#5a6a7e]",   bar: "bg-[#cfc7bc]", dot: "bg-[#5a6a7e]" },
+  "En cours":{ badge: "bg-[#eff6ff] text-[#1d4ed8]",   bar: "bg-[#2563eb]", dot: "bg-[#2563eb]" },
+  "Bloqué":  { badge: "bg-[#fef2f2] text-[#dc2626]",   bar: "bg-[#dc2626]", dot: "bg-[#dc2626]" },
+  "Terminé": { badge: "bg-[#f0fdf4] text-[#15803d]",   bar: "bg-[#16a34a]", dot: "bg-[#16a34a]" },
 };
 
 const HEALTH_META: Record<ManagedProject["health"], { cls: string; dot: string }> = {
@@ -107,10 +107,10 @@ const TRACKING_META: Record<TrackingStatus, { cls: string; bar: string }> = {
 };
 
 const INTERVENTION_META: Record<InterventionStatus, { cls: string; dot: string }> = {
-  Prévue:      { cls: "bg-sky-50 text-sky-700",       dot: "bg-sky-500" },
-  Réalisée:    { cls: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
-  Reportée:    { cls: "bg-amber-50 text-amber-700",     dot: "bg-amber-500" },
-  Annulée:     { cls: "bg-red-50 text-red-600",         dot: "bg-red-500" },
+  Prévue:      { cls: "bg-[#ede9e3] text-[#5a6a7e]", dot: "bg-[#5a6a7e]" },
+  Réalisée:    { cls: "bg-[#f0fdf4] text-[#15803d]", dot: "bg-[#16a34a]" },
+  Reportée:    { cls: "bg-[#fef3c7] text-[#92400e]", dot: "bg-[#d97706]" },
+  Annulée:     { cls: "bg-[#fef2f2] text-[#dc2626]", dot: "bg-[#dc2626]" },
 };
 
 const STATUS_DOT: Record<ManagedProject["status"], string> = {
@@ -571,7 +571,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div dir="ltr" className="flex h-dvh overflow-hidden bg-[#f0f2f5] font-sans text-slate-900 antialiased">
+    <div dir="ltr" className="projects-app flex h-dvh overflow-hidden text-[13px] text-[var(--tsp-text)] antialiased">
 
       {isSidebarOpen && (
         <button
@@ -584,20 +584,20 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
       {/* ══ SIDEBAR ══════════════════════════════════════════════════════════ */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[86vw] shrink-0 flex-col overflow-hidden bg-[#0d1b2a] shadow-2xl shadow-slate-950/40 transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[248px] lg:max-w-none lg:translate-x-0 lg:shadow-none ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+        className={`projects-sidebar fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[86vw] shrink-0 flex-col overflow-hidden transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-[248px] lg:max-w-none lg:translate-x-0 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* Brand */}
-        <div className="flex items-center gap-3 px-5 py-[18px] border-b border-white/[0.06]">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#d9140e] shadow-lg shadow-red-900/40">
+        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-[18px]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08]">
             <FolderKanban className="h-4 w-4 text-white" />
           </div>
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-white/30">Tech-Solution</div>
-            <div className="text-[13px] font-bold text-white">Projects</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.5px] text-white/[0.45]">Tech-Solution</div>
+            <div className="text-[17px] font-bold text-white">Projects</div>
           </div>
           <button
             aria-label="Fermer le menu"
-            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-white/35 transition hover:bg-white/[0.06] hover:text-white/70 lg:hidden"
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-white/[0.35] transition hover:bg-white/[0.06] hover:text-white/70 lg:hidden"
             onClick={() => setIsSidebarOpen(false)}
             type="button"
           >
@@ -607,25 +607,29 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
         {/* Projects list */}
         <div className="flex-1 overflow-y-auto px-3 py-4">
-          <div className="mb-2 px-2 text-[10px] font-bold uppercase tracking-widest text-white/25">
+          <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.5px] text-white/[0.45]">
             Projets · {data.projects.length}
           </div>
-          <div className="space-y-px">
+          <div className="space-y-2">
             {data.projects.map((project) => {
               const isActive = workspaceView === "project" && selectedProject?.id === project.id;
               return (
                 <button key={project.id} onClick={() => { setSelectedProjectId(project.id); setWorkspaceView("project"); setIsSidebarOpen(false); }} type="button"
-                  className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-all ${isActive ? "bg-white/[0.10] text-white" : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"}`}
+                  className={`group flex w-full items-center gap-3 rounded-[10px] border border-transparent border-l-[3px] px-3 py-2.5 text-left transition-all ${isActive ? "bg-white text-[var(--tsp-text)]" : "bg-white/[0.05] text-white/[0.75] hover:bg-white/[0.08] hover:text-white"}`}
+                  style={{
+                    borderColor: isActive ? "var(--tsp-border)" : "transparent",
+                    borderLeftColor: project.color,
+                  }}
                 >
-                  <span className="h-2 w-2 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: project.color }} />
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: project.color }} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{project.name}</span>
+                    <span className="block truncate text-[15px] font-semibold">{project.name}</span>
                     <span className="mt-0.5 flex items-center gap-1.5">
                       <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[project.status]}`} />
-                      <span className={`text-[11px] ${isActive ? "text-white/50" : "text-white/30"}`}>{project.type} · {project.status}</span>
+                      <span className={`text-[11px] ${isActive ? "text-[var(--tsp-text-secondary)]" : "text-white/[0.45]"}`}>{project.type} · {project.status}</span>
                     </span>
                   </span>
-                  {isActive && <ChevronRight className="h-3 w-3 shrink-0 text-white/30" />}
+                  {isActive && <ChevronRight className="h-3 w-3 shrink-0 text-[var(--tsp-text-secondary)]" />}
                 </button>
               );
             })}
@@ -637,11 +641,11 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
             <button
               onClick={() => { setWorkspaceView("team"); setIsSidebarOpen(false); }}
               type="button"
-              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition ${workspaceView === "team" ? "bg-white/[0.10] text-white" : "text-white/45 hover:bg-white/[0.05] hover:text-white/75"}`}
+              className={`flex w-full items-center gap-2 rounded-[10px] border border-transparent px-3 py-2.5 text-sm transition ${workspaceView === "team" ? "bg-white text-[var(--tsp-text)]" : "bg-white/[0.05] text-white/[0.60] hover:bg-white/[0.08] hover:text-white"}`}
             >
               <Users className="h-4 w-4" />
               <span className="flex-1 text-left font-medium">Équipe</span>
-              <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] text-white/35">{data.teamUsers.length}</span>
+              <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${workspaceView === "team" ? "bg-[var(--tsp-bg-surface)] text-[var(--tsp-text-secondary)]" : "bg-white/10 text-white/[0.45]"}`}>{data.teamUsers.length}</span>
             </button>
           </div>
         )}
@@ -649,28 +653,28 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         {isSuperAdmin && (
           <div className="border-t border-white/[0.06] px-3 py-3">
             <button onClick={() => setShowAddProject((v) => !v)} type="button"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/40 transition hover:bg-white/[0.05] hover:text-white/70">
+              className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-sm text-white/[0.55] transition hover:bg-white/[0.08] hover:text-white">
               <Plus className="h-4 w-4" />
               <span className="flex-1 text-left">Nouveau projet</span>
               <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showAddProject ? "rotate-180" : ""}`} />
             </button>
             {showAddProject && (
-              <form onSubmit={handleAddProject} className="mt-2 space-y-2 rounded-xl bg-white/[0.05] p-3">
+              <form onSubmit={handleAddProject} className="mt-2 space-y-2 rounded-[10px] border border-white/10 bg-white/[0.06] p-3">
                 <input
-                  className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.07] px-3 text-sm text-white placeholder-white/25 outline-none focus:border-[#d9140e]/50 focus:bg-white/10"
+                  className="h-9 w-full rounded-[10px] border border-white/10 bg-white/10 px-3 text-[13px] text-white placeholder-white/[0.35] outline-none"
                   onChange={(e) => setProjectForm((c) => ({ ...c, name: e.target.value }))}
                   placeholder="Nom du projet" value={projectForm.name}
                 />
                 <div className="grid grid-cols-[1fr_34px] gap-2">
-                  <select className="h-8 rounded-lg border border-white/10 bg-white/[0.07] px-2 text-sm text-white/70 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, type: e.target.value as ManagedProject["type"] }))} value={projectForm.type}>
+                  <select className="h-9 rounded-[10px] border border-white/10 bg-white/10 px-2 text-[13px] text-white/80 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, type: e.target.value as ManagedProject["type"] }))} value={projectForm.type}>
                     {PROJECT_TYPES.map((t) => <option key={t} value={t} className="bg-[#0d1b2a]">{t}</option>)}
                   </select>
-                  <input aria-label="Couleur" type="color" className="h-8 rounded-lg border border-white/10 bg-white/[0.07] p-0.5" onChange={(e) => setProjectForm((c) => ({ ...c, color: e.target.value }))} value={projectForm.color} />
+                  <input aria-label="Couleur" type="color" className="h-9 rounded-[10px] border border-white/10 bg-white/10 p-1" onChange={(e) => setProjectForm((c) => ({ ...c, color: e.target.value }))} value={projectForm.color} />
                 </div>
-                <select className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.07] px-2 text-sm text-white/70 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, status: e.target.value as ManagedProject["status"] }))} value={projectForm.status}>
+                <select className="h-9 w-full rounded-[10px] border border-white/10 bg-white/10 px-2 text-[13px] text-white/80 outline-none" onChange={(e) => setProjectForm((c) => ({ ...c, status: e.target.value as ManagedProject["status"] }))} value={projectForm.status}>
                   {PROJECT_STATUSES.map((s) => <option key={s} value={s} className="bg-[#0d1b2a]">{s}</option>)}
                 </select>
-                <button type="submit" className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#d9140e] text-sm font-semibold text-white hover:bg-[#b91010]">
+                <button type="submit" className="projects-btn-secondary flex h-9 w-full items-center justify-center gap-1.5 text-[13px] font-semibold">
                   <Plus className="h-3.5 w-3.5" /> Créer
                 </button>
               </form>
@@ -680,17 +684,17 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
         {/* Logout */}
         <div className="border-t border-white/[0.06] px-3 py-3">
-          <div className="mb-2 flex min-w-0 items-center gap-2 rounded-lg px-3 py-2">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-white/50">
+          <div className="mb-2 flex min-w-0 items-center gap-2 rounded-[10px] px-3 py-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.08] text-white/[0.55]">
               <User className="h-3.5 w-3.5" />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-white/70">{currentUser.name}</p>
-              <p className="truncate text-[10px] text-white/25">{currentUser.role === "super_admin" ? "Super admin" : "Membre"}</p>
+              <p className="truncate text-xs font-semibold text-white">{currentUser.name}</p>
+              <p className="truncate text-[11px] text-white/[0.45]">{currentUser.role === "super_admin" ? "Super admin" : "Membre"}</p>
             </div>
           </div>
           <form action={logoutAction}>
-            <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/35 transition hover:bg-white/[0.05] hover:text-white/60">
+            <button type="submit" className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-sm text-white/[0.55] transition hover:bg-white/[0.08] hover:text-white">
               <LogOut className="h-4 w-4" /> Déconnexion
             </button>
           </form>
@@ -701,11 +705,11 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         {/* Top bar */}
-        <header className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-3 shadow-sm shadow-slate-200/40 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2 text-sm">
+        <header className="projects-topbar flex h-[56px] shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2 text-[13px]">
             <button
               aria-label="Ouvrir le menu"
-              className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-800 lg:hidden"
+              className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.06] text-white/[0.75] transition hover:bg-white/10 hover:text-white lg:hidden"
               onClick={() => setIsSidebarOpen(true)}
               type="button"
             >
@@ -713,46 +717,46 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
             </button>
             {workspaceView === "team" ? (
               <>
-                <Users className="h-4 w-4 shrink-0 text-slate-400" />
-                <span className="truncate font-semibold text-slate-700">Équipe</span>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-                <span className="font-medium text-slate-400">Accès projets</span>
+                <Users className="h-4 w-4 shrink-0 text-white/[0.55]" />
+                <span className="truncate font-semibold text-white">Équipe</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                <span className="font-medium text-white/[0.45]">Accès projets</span>
               </>
             ) : selectedProject && <>
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: selectedProject.color }} />
-              <span className="truncate font-semibold text-slate-700">{selectedProject.name}</span>
-              <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
-              <span className="font-medium text-slate-400">{activeTab}</span>
+              <span className="truncate font-semibold text-white">{selectedProject.name}</span>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-white/30" />
+              <span className="font-medium text-white/[0.45]">{activeTab}</span>
             </>}
           </div>
           <SaveBadge saveState={saveState} />
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-auto p-1.5 sm:p-5">
+        <main className="flex-1 overflow-auto p-2 sm:p-4">
           {isLoading ? (
-            <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="projects-shell flex min-h-[400px] items-center justify-center">
               <div className="flex items-center gap-3 text-sm text-slate-400">
-                <Loader2 className="h-5 w-5 animate-spin text-[#d9140e]" /> Chargement…
+                <Loader2 className="h-5 w-5 animate-spin text-[var(--tsp-navy)]" /> Chargement…
               </div>
             </div>
           ) : loadError ? (
             <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
-              <AlertCircle className="h-8 w-8 text-[#d9140e]" />
+              <AlertCircle className="h-8 w-8 text-[var(--tsp-red)]" />
               <p className="font-semibold text-red-900">{loadError}</p>
-              <button onClick={() => void loadData()} className="rounded-xl bg-[#d9140e] px-5 py-2 text-sm font-semibold text-white hover:bg-[#b91010]">Réessayer</button>
+              <button onClick={() => void loadData()} className="projects-btn-primary px-5 py-2 text-sm font-semibold">Réessayer</button>
             </div>
           ) : workspaceView === "team" && isSuperAdmin ? (
-            <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60 sm:rounded-2xl">
-              <div className="border-b border-slate-100 px-6 py-5">
+            <div className="projects-shell">
+              <div className="border-b border-[var(--tsp-border)] bg-[var(--tsp-navy)] px-5 py-5 text-white">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0d1b2a] text-white shadow-sm">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white">
                       <Users className="h-4 w-4" />
                     </div>
                     <div>
-                      <h1 className="text-2xl font-bold text-slate-900">Équipe</h1>
-                      <p className="mt-1 text-sm text-slate-400">Gérer les membres et les projets visibles par chacun.</p>
+                      <div aria-level={1} role="heading" className="text-[17px] font-bold text-white">Équipe</div>
+                      <p className="mt-1 text-[12px] text-white/[0.45]">Gérer les membres et les projets visibles par chacun.</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-3 lg:justify-end">
@@ -772,27 +776,27 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               />
             </div>
           ) : selectedProject ? (
-            <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/60 sm:rounded-2xl">
+            <div className="projects-shell">
 
               {/* ── Project header ── */}
-              <div className="border-b border-slate-100 px-2.5 pt-4 pb-0 sm:px-6 sm:pt-5">
+              <div className="border-b border-white/[0.08] bg-[var(--tsp-navy)] px-3 pt-4 pb-0 text-white sm:px-5 sm:pt-5">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   {/* Title + meta */}
                   <div className="flex items-start gap-2.5 sm:gap-3">
-                    <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full shadow-sm sm:h-3 sm:w-3" style={{ backgroundColor: selectedProject.color }} />
+                    <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full sm:h-3 sm:w-3" style={{ backgroundColor: selectedProject.color }} />
                     <div className="min-w-0">
                       <div
                         aria-level={1}
-                        className="truncate font-bold leading-[1.05] text-slate-900"
+                        className="truncate font-bold leading-[1.05] text-white"
                         role="heading"
-                        style={{ fontSize: "clamp(1.15rem, 1.3rem + 1vw, 2.25rem)", letterSpacing: 0 }}
+                        style={{ fontSize: "clamp(1.15rem, 1.05rem + 1.35vw, 2rem)", letterSpacing: 0 }}
                       >
                         {selectedProject.name}
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <TypeBadge type={selectedProject.type} />
                         <StatusBadge status={selectedProject.status} />
-                        <span className="text-xs text-slate-400">{projectTasks.length} tâche{projectTasks.length > 1 ? "s" : ""}</span>
+                        <span className="text-[12px] text-white/[0.55]">{projectTasks.length} tâche{projectTasks.length > 1 ? "s" : ""}</span>
                       </div>
                     </div>
                   </div>
@@ -809,19 +813,19 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 {activeTab === "Tâches" && (
                   <div className="mt-3 flex justify-center sm:hidden">
                     <button onClick={() => { setEditingTask(null); setIsTaskEditorOpen(true); }} type="button"
-                      className="flex h-8 min-w-[116px] items-center justify-center gap-1.5 rounded-full bg-[#d9140e] px-4 text-xs font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]">
+                      className="projects-btn-secondary flex h-9 min-w-[126px] items-center justify-center gap-1.5 px-4 text-[13px] font-semibold">
                       <Plus className="h-3.5 w-3.5" /> Nouvelle tâche
                     </button>
                   </div>
                 )}
 
                 <div className="mt-3 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
-                  <nav className="grid grid-cols-5 gap-1 rounded-2xl bg-slate-50 p-1 sm:flex sm:min-w-0 sm:overflow-x-auto sm:rounded-none sm:bg-transparent sm:p-0">
+                  <nav className="grid grid-cols-5 gap-1 rounded-[10px] bg-white/[0.06] p-1 sm:flex sm:min-w-0 sm:overflow-x-auto sm:rounded-none sm:bg-transparent sm:p-0">
                     {PROJECT_TABS.map(({ label, icon: Icon, shortLabel }) => {
                       const active = activeTab === label;
                       return (
                         <button key={label} onClick={() => setActiveTab(label)} type="button"
-                          className={`flex min-w-0 shrink-0 items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold transition-all sm:justify-start sm:gap-2 sm:rounded-none sm:border-b-2 sm:px-4 sm:py-3 sm:text-sm ${active ? "bg-white text-slate-900 shadow-sm sm:border-[#d9140e] sm:bg-transparent sm:shadow-none" : "text-slate-400 hover:bg-white/70 hover:text-slate-600 sm:border-transparent sm:hover:border-slate-200 sm:hover:bg-transparent"}`}>
+                          className={`flex min-w-0 shrink-0 items-center justify-center gap-1 rounded-[8px] px-1 py-2 text-[11px] font-semibold transition-all sm:justify-start sm:gap-2 sm:rounded-none sm:border-b-2 sm:px-4 sm:py-3 sm:text-[13px] ${active ? "bg-white text-[var(--tsp-text)] sm:border-white sm:bg-transparent sm:text-white" : "text-white/[0.45] hover:bg-white/[0.08] hover:text-white sm:border-transparent sm:hover:border-white/20 sm:hover:bg-transparent"}`}>
                           <Icon className="hidden h-3.5 w-3.5 sm:block" />
                           <span className="truncate sm:hidden">{shortLabel ?? label}</span>
                           <span className="hidden sm:inline">{label}</span>
@@ -832,7 +836,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                   {activeTab === "Tâches" && (
                     <div className="mb-1 hidden sm:block">
                       <button onClick={() => { setEditingTask(null); setIsTaskEditorOpen(true); }} type="button"
-                        className="flex h-8 items-center gap-1.5 rounded-xl bg-[#d9140e] px-3 text-xs font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]">
+                        className="projects-btn-secondary flex h-9 items-center gap-1.5 px-3 text-[13px] font-semibold">
                         <Plus className="h-3.5 w-3.5" /> Nouvelle tâche
                       </button>
                     </div>
@@ -842,34 +846,34 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
               {/* ── Tab filter bar (Tasks only) ── */}
               {activeTab === "Tâches" && (
-                <div className="space-y-2 border-b border-slate-100 bg-slate-50/60 px-2 py-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:space-y-0 sm:px-6 sm:py-3">
-                  <div className="grid w-full grid-cols-5 items-center gap-1 rounded-xl border border-slate-200 bg-white px-1.5 py-1 shadow-sm sm:flex sm:w-auto sm:px-2">
-                    <Filter className="hidden h-3 w-3 text-slate-400 sm:block" />
+                <div className="space-y-2 border-b border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] px-2 py-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:space-y-0 sm:px-5 sm:py-3">
+                  <div className="projects-surface grid w-full grid-cols-5 items-center gap-1 px-1.5 py-1 sm:flex sm:w-auto sm:px-2">
+                    <Filter className="hidden h-3 w-3 text-[var(--tsp-text-secondary)] sm:block" />
                     {(["Tous", ...TASK_STATUSES] as StatusFilter[]).map((s) => (
                       <button key={s} onClick={() => setStatusFilter(s)} type="button"
-                        className={`min-w-0 rounded-lg px-1 py-1 text-[10px] font-medium transition sm:shrink-0 sm:px-2.5 sm:text-xs ${statusFilter === s ? "bg-[#0d1b2a] text-white" : "text-slate-500 hover:bg-slate-100"}`}>
+                        className={`min-w-0 rounded-[8px] px-1 py-1 text-[11px] font-semibold transition sm:shrink-0 sm:px-2.5 ${statusFilter === s ? "bg-[var(--tsp-navy)] text-white" : "text-[var(--tsp-text-secondary)] hover:bg-[var(--tsp-bg-surface)]"}`}>
                         {s}
                       </button>
                     ))}
                   </div>
-                  <label className="flex h-8 w-full items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs shadow-sm sm:w-auto">
-                    <User className="h-3 w-3 text-slate-400" />
-                    <select disabled={!responsibleOptions.length} className="min-w-0 flex-1 bg-transparent text-xs text-slate-600 outline-none sm:flex-none" onChange={(e) => setResponsibleFilter(e.target.value)} value={responsibleFilter}>
+                  <label className="projects-surface flex h-9 w-full items-center gap-1.5 px-3 text-[12px] sm:w-auto">
+                    <User className="h-3 w-3 text-[var(--tsp-text-secondary)]" />
+                    <select disabled={!responsibleOptions.length} className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--tsp-text-secondary)] outline-none sm:flex-none" onChange={(e) => setResponsibleFilter(e.target.value)} value={responsibleFilter}>
                       <option value="Tous">Tous les responsables</option>
                       {responsibleOptions.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </label>
                   <form
-                    className="flex h-8 w-full items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 shadow-sm sm:ml-auto sm:min-w-[220px] sm:w-auto"
+                    className="projects-surface flex h-9 w-full items-center gap-1.5 px-2 sm:ml-auto sm:min-w-[220px] sm:w-auto"
                     onSubmit={(e) => {
                       e.preventDefault();
                       handleAddTaskSection(selectedProject.id, taskSectionName);
                       setTaskSectionName("");
                     }}
                   >
-                    <Columns3 className="h-3 w-3 text-slate-400" />
+                    <Columns3 className="h-3 w-3 text-[var(--tsp-text-secondary)]" />
                     <input
-                      className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 placeholder-slate-400 outline-none"
+                      className="min-w-0 flex-1 bg-transparent text-[12px] text-[var(--tsp-text)] placeholder-[var(--tsp-text-secondary)] outline-none"
                       onChange={(e) => setTaskSectionName(e.target.value)}
                       placeholder="Nouvelle section"
                       value={taskSectionName}
@@ -877,7 +881,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     <button
                       type="submit"
                       disabled={!taskSectionName.trim()}
-                      className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0d1b2a] text-white transition hover:bg-[#1e3a5f] disabled:opacity-35"
+                      className="projects-btn-primary flex h-7 w-7 items-center justify-center rounded-[8px] transition disabled:opacity-35"
                       title="Ajouter la section"
                     >
                       <Plus className="h-3 w-3" />
@@ -937,35 +941,35 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
       <div className="space-y-5">
 
         {/* Progress card */}
-        <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
+        <div className="projects-surface p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Avancement réel</p>
-              <p className="mt-0.5 text-sm text-slate-500">Calculé depuis les tâches terminées</p>
+              <p className="projects-label">Avancement réel</p>
+              <p className="mt-0.5 text-[13px] text-[var(--tsp-text-secondary)]">Calculé depuis les tâches terminées</p>
             </div>
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-md shadow-slate-200/60 ring-1 ring-slate-200/60">
-              <span className="text-xl font-bold text-slate-800">{stats.progress}<span className="text-sm font-semibold text-slate-400">%</span></span>
+            <div className="projects-surface-soft flex h-14 w-14 items-center justify-center rounded-[10px]">
+              <span className="text-xl font-bold text-[var(--tsp-text)]">{stats.progress}<span className="text-sm font-semibold text-[var(--tsp-text-secondary)]">%</span></span>
             </div>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-200/60">
+          <div className="h-1 overflow-hidden rounded-[2px] bg-[var(--tsp-bg-surface)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#d9140e] to-[#f05050] transition-all duration-700"
-              style={{ width: `${stats.progress}%` }}
+              className="h-full rounded-[2px] transition-all duration-700"
+              style={{ backgroundColor: project.color, width: `${stats.progress}%` }}
             />
           </div>
-          <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-400">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-            {stats.done} terminée{stats.done > 1 ? "s" : ""} sur {stats.total} · {stats.blocked > 0 && <><span className="text-red-500 font-medium">{stats.blocked} bloquée{stats.blocked > 1 ? "s" : ""}</span> · </>}{stats.overdue > 0 && <span className="text-amber-500 font-medium">{stats.overdue} en retard</span>}
+          <div className="mt-3 flex items-center gap-1.5 text-[12px] text-[var(--tsp-text-secondary)]">
+            <CheckCircle2 className="h-3.5 w-3.5 text-[var(--tsp-green)]" />
+            {stats.done} terminée{stats.done > 1 ? "s" : ""} sur {stats.total} · {stats.blocked > 0 && <><span className="font-medium text-[var(--tsp-red)]">{stats.blocked} bloquée{stats.blocked > 1 ? "s" : ""}</span> · </>}{stats.overdue > 0 && <span className="font-medium text-[var(--tsp-amber)]">{stats.overdue} en retard</span>}
           </div>
         </div>
 
         {/* Next actions */}
         <div>
           <div className="mb-3 flex items-center gap-2">
-            <Zap className="h-4 w-4 text-[#d9140e]" />
-            <h3 className="text-sm font-bold text-slate-800">Prochaines actions</h3>
+            <Zap className="h-4 w-4 text-[var(--tsp-navy)]" />
+            <h3 className="text-[15px] font-semibold text-[var(--tsp-text)]">Prochaines actions</h3>
             {nextActionTasks.length > 0 && (
-              <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">{nextActionTasks.length}</span>
+              <span className="ml-auto rounded-md bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">{nextActionTasks.length}</span>
             )}
           </div>
           <div className="space-y-2">
@@ -979,8 +983,8 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
           <div>
             <div className="mb-3 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-red-500" />
-              <h3 className="text-sm font-bold text-slate-800">Blocages</h3>
-              <span className="ml-auto rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600">{blockedTasks.length}</span>
+              <h3 className="text-[15px] font-semibold text-[var(--tsp-text)]">Blocages</h3>
+              <span className="ml-auto rounded-md bg-[#fef2f2] px-2 py-0.5 text-[11px] font-semibold text-[#dc2626]">{blockedTasks.length}</span>
             </div>
             <div className="space-y-2">
               {blockedTasks.map((task) => <TaskCard key={task.id} task={task} />)}
@@ -992,8 +996,8 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
       {/* Right column – summary */}
       <div className="space-y-4">
         {/* Health card */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm shadow-slate-100/80">
-          <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">Synthèse</p>
+        <div className="projects-surface p-5">
+          <p className="projects-label mb-4">Synthèse</p>
           <div className="space-y-3">
             {[
               { label: "Santé projet", node: <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${HEALTH_META[project.health].cls}`}>{project.health}</span> },
@@ -1001,8 +1005,8 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
               { label: "Bloquées",    node: <span className={`text-sm font-bold ${stats.blocked > 0 ? "text-red-600" : "text-slate-300"}`}>{stats.blocked}</span> },
               { label: "En retard",   node: <span className={`text-sm font-bold ${stats.overdue > 0 ? "text-amber-600" : "text-slate-300"}`}>{stats.overdue}</span> },
             ].map(({ label, node }) => (
-              <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
-                <span className="text-xs font-medium text-slate-500">{label}</span>
+              <div key={label} className="flex items-center justify-between gap-3 rounded-[10px] bg-[var(--tsp-bg-surface)] px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">{label}</span>
                 {node}
               </div>
             ))}
@@ -1024,23 +1028,23 @@ function PilotageTab({ nextActionTasks, blockedTasks, project, stats }: {
 function TaskCard({ task }: { task: ManagedTask }) {
   const sm = STATUS_META[task.status];
   return (
-    <div className={`flex gap-3 rounded-xl border border-slate-100 bg-white p-4 shadow-sm transition hover:border-slate-200 hover:shadow-md hover:shadow-slate-100`}>
+    <div className="projects-surface flex gap-3 p-[14px] transition">
       <div className={`mt-0.5 h-full w-1 shrink-0 self-stretch rounded-full ${sm.bar} opacity-70`} style={{ minHeight: 24 }} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-800">{task.title}</p>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${sm.badge}`}>{task.status}</span>
+          <p className="text-[14px] font-semibold text-[var(--tsp-text)]">{task.title}</p>
+          <span className={`shrink-0 rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${sm.badge}`}>{task.status}</span>
         </div>
-        {task.note && <p className="mt-1 text-xs leading-relaxed text-slate-400">{task.note}</p>}
+        {task.note && <p className="mt-1 text-[12px] leading-relaxed text-[var(--tsp-text-secondary)]">{task.note}</p>}
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${PRIORITY_META[task.priority].cls}`}>{task.priority}</span>
+          <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${PRIORITY_META[task.priority].cls}`}>{task.priority}</span>
           {task.responsible && (
-            <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+            <span className="flex items-center gap-1 rounded-md bg-[var(--tsp-bg-surface)] px-2 py-0.5 text-[11px] text-[var(--tsp-text-secondary)]">
               <User className="h-2.5 w-2.5" />{task.responsible}
             </span>
           )}
           {task.dueDate && (
-            <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${isOverdue(task) ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"}`}>
+            <span className={`flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold ${isOverdue(task) ? "bg-[#fef2f2] text-[#dc2626]" : "bg-[var(--tsp-bg-surface)] text-[var(--tsp-text-secondary)]"}`}>
               <Calendar className="h-2.5 w-2.5" />{task.dueDate}
             </span>
           )}
@@ -1141,7 +1145,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
               <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
               <span className="h-2.5 w-2.5 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: group.color }} />
               <span className="truncate text-sm font-bold text-slate-800">{group.name}</span>
-              <span className="rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-semibold text-slate-500 shadow-sm ring-1 ring-slate-200/70">
+              <span className="rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
                 {group.tasks.length} tâche{group.tasks.length > 1 ? "s" : ""}
               </span>
             </button>
@@ -1247,7 +1251,7 @@ function MobileSectionHeader({ color, count, isOpen, name, onDelete, onToggle }:
         <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />
         <span className="h-2.5 w-2.5 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: color }} />
         <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{name}</span>
-        <span className="shrink-0 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-slate-500 shadow-sm ring-1 ring-slate-200/70">
+        <span className="shrink-0 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
           {count}
         </span>
       </button>
@@ -1821,7 +1825,7 @@ function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId 
             <p className="text-sm font-bold text-slate-800">Nouvelle intervention</p>
             <p className="text-xs text-slate-400">Date, lieu, prestation, statut et justificatifs.</p>
           </div>
-          <button type="submit" className="hidden h-9 items-center gap-1.5 rounded-xl bg-[#d9140e] px-4 text-sm font-semibold text-white transition hover:bg-[#b91010] sm:flex" disabled={isUploadingPhotos}>
+          <button type="submit" className="projects-btn-primary hidden h-9 items-center gap-1.5 px-4 text-sm font-semibold sm:flex" disabled={isUploadingPhotos}>
             <Plus className="h-3.5 w-3.5" /> Ajouter
           </button>
         </div>
@@ -1889,7 +1893,7 @@ function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId 
         )}
         <textarea className="mt-2 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" rows={2} onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Note optionnelle..." value={draft.note} />
         {formError && <p className="mt-2 text-sm font-medium text-red-600">{formError}</p>}
-        <button type="submit" className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#d9140e] text-sm font-semibold text-white transition hover:bg-[#b91010] sm:hidden" disabled={isUploadingPhotos}>
+        <button type="submit" className="projects-btn-primary mt-2 flex h-10 w-full items-center justify-center gap-1.5 text-sm font-semibold sm:hidden" disabled={isUploadingPhotos}>
           <Plus className="h-3.5 w-3.5" /> Ajouter
         </button>
       </form>
@@ -2161,7 +2165,7 @@ function InterventionEditor({ intervention, onClose, onSave, onUploadPhotos }: {
           {error && <p className="text-sm font-medium text-red-600 sm:col-span-2">{error}</p>}
           <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:col-span-2 sm:m-0 sm:flex-row sm:justify-end sm:border-t-0 sm:bg-transparent sm:p-0">
             <button onClick={onClose} type="button" className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
-            <button type="submit" className="h-10 rounded-xl bg-[#d9140e] px-6 text-sm font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]" disabled={isUploading}>Enregistrer</button>
+            <button type="submit" className="projects-btn-primary h-10 px-6 text-sm font-semibold" disabled={isUploading}>Enregistrer</button>
           </div>
         </form>
       </div>
@@ -2196,7 +2200,7 @@ function SuiviTab({ fields, updates, project, onAddField, onUpdateField, onDelet
           </div>
           <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); onAddField(project.id, fieldLabel); setFieldLabel(""); }}>
             <input className="h-9 min-w-[180px] rounded-xl border border-slate-200 px-3 text-sm placeholder-slate-400 outline-none focus:border-[#d9140e]/40 focus:ring-1 focus:ring-[#d9140e]/15" onChange={(e) => setFieldLabel(e.target.value)} placeholder="Nouvel indicateur…" value={fieldLabel} />
-            <button type="submit" disabled={!fieldLabel.trim()} className="flex h-9 items-center gap-1.5 rounded-xl bg-[#d9140e] px-4 text-sm font-semibold text-white disabled:opacity-50 hover:bg-[#b91010]">
+            <button type="submit" disabled={!fieldLabel.trim()} className="projects-btn-primary flex h-9 items-center gap-1.5 px-4 text-sm font-semibold disabled:opacity-50">
               <Plus className="h-3.5 w-3.5" /> Ajouter
             </button>
           </form>
@@ -2354,7 +2358,7 @@ function TeamTab({ onAddUser, onToggleProjectAccess, onUpdateUser, projectAccess
             <button
               type="submit"
               disabled={!newUser.name.trim() || !newUser.email.trim()}
-              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-[#d9140e] text-sm font-semibold text-white transition hover:bg-[#b91010] disabled:opacity-40"
+              className="projects-btn-primary flex h-9 w-full items-center justify-center gap-1.5 text-sm font-semibold transition disabled:opacity-40"
             >
               <Plus className="h-3.5 w-3.5" /> Ajouter
             </button>
@@ -2451,24 +2455,24 @@ function TeamTab({ onAddUser, onToggleProjectAccess, onUpdateUser, projectAccess
 // ════════════════════════════════════════════════════════════════════════════
 
 function StatPill({ label, value, color, icon }: { label: string; value: number; color: "slate"|"emerald"|"red"|"amber"; icon: React.ReactNode }) {
-  const colors = { slate: "text-slate-400", emerald: "text-emerald-500", red: "text-red-500", amber: "text-amber-500" };
-  const numColors = { slate: "text-slate-700", emerald: "text-slate-700", red: value > 0 ? "text-red-600" : "text-slate-300", amber: value > 0 ? "text-amber-600" : "text-slate-300" };
+  const colors = { slate: "text-white/[0.55]", emerald: "text-[#34d399]", red: "text-[#f87171]", amber: "text-[#fbbf24]" };
+  const numColors = { slate: "text-white", emerald: "text-white", red: value > 0 ? "text-white" : "text-white/40", amber: value > 0 ? "text-white" : "text-white/40" };
   return (
-    <div className="flex min-w-0 flex-col items-center gap-0.5 rounded-xl border border-slate-100 bg-white px-1.5 py-2 shadow-sm shadow-slate-100/60 sm:min-w-[64px] sm:px-3.5 sm:py-2.5">
+    <div className="projects-kpi-dark flex min-w-0 flex-col items-center gap-0.5 px-1.5 py-2 sm:min-w-[74px] sm:px-3.5 sm:py-2.5">
       <span className={`${colors[color]}`}>{icon}</span>
       <span className={`text-base font-bold sm:text-lg ${numColors[color]}`}>{value}</span>
-      <span className="max-w-full truncate text-[9px] font-medium text-slate-400 sm:text-[10px]">{label}</span>
+      <span className="max-w-full truncate text-[10px] font-medium text-white/[0.45]">{label}</span>
     </div>
   );
 }
 
 function TypeBadge({ type }: { type: ManagedProject["type"] }) {
-  return <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-500">{type}</span>;
+  return <span className="rounded-md bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-white/[0.75]">{type}</span>;
 }
 
 function StatusBadge({ status }: { status: ManagedProject["status"] }) {
-  const cls = status === "Actif" ? "bg-emerald-50 text-emerald-700" : status === "En pause" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500";
-  return <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${cls}`}>{status}</span>;
+  const cls = status === "Actif" ? "bg-[#f0fdf4] text-[#15803d]" : status === "En pause" ? "bg-[#fef3c7] text-[#92400e]" : "bg-[#ede9e3] text-[#5a6a7e]";
+  return <span className={`rounded-md px-2.5 py-0.5 text-[11px] font-semibold ${cls}`}>{status}</span>;
 }
 
 function EmptyState({ label, small }: { label: string; small?: boolean }) {
@@ -2481,10 +2485,10 @@ function EmptyState({ label, small }: { label: string; small?: boolean }) {
 
 function SaveBadge({ saveState }: { saveState: SaveState }) {
   const map: Record<SaveState, { label: string; cls: string }> = {
-    error:  { label: "Erreur",        cls: "text-red-500"     },
-    idle:   { label: "Prêt",          cls: "text-slate-400"   },
-    saved:  { label: "Sauvegardé",    cls: "text-emerald-500" },
-    saving: { label: "Sauvegarde…",   cls: "text-slate-400"   },
+    error:  { label: "Erreur",        cls: "text-[#f87171]" },
+    idle:   { label: "Prêt",          cls: "text-white/[0.45]" },
+    saved:  { label: "Sauvegardé",    cls: "text-[#86efac]" },
+    saving: { label: "Sauvegarde…",   cls: "text-white/[0.45]" },
   };
   const { label, cls } = map[saveState];
   return (
@@ -2576,7 +2580,7 @@ function TaskEditor({ defaultProjectId, onClose, onSave, projects, sections, tas
 
           <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:m-0 sm:flex-row sm:justify-end sm:border-t-0 sm:bg-transparent sm:p-0">
             <button onClick={onClose} type="button" className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
-            <button type="submit" className="h-10 rounded-xl bg-[#d9140e] px-6 text-sm font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]">Enregistrer</button>
+            <button type="submit" className="projects-btn-primary h-10 px-6 text-sm font-semibold">Enregistrer</button>
           </div>
         </form>
       </div>

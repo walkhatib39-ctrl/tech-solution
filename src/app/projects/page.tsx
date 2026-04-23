@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { DM_Sans } from "next/font/google";
 import {
   createProjectsAuthToken,
   getProjectsSession,
@@ -11,6 +12,13 @@ import {
 import { authenticateProjectsUser } from "@/lib/projectsStore";
 import ProjectsLogin, { ProjectLoginState } from "./ProjectsLogin";
 import ProjectsManager from "./ProjectsManager";
+
+const dmSans = DM_Sans({
+  display: "swap",
+  subsets: ["latin"],
+  variable: "--font-projects",
+  weight: ["400", "500", "600", "700"],
+});
 
 export const metadata: Metadata = {
   title: "Projects | Tech-Solution",
@@ -74,12 +82,18 @@ export default async function ProjectsPage() {
 
   if (!currentUser) {
     return (
-      <ProjectsLogin
-        loginAction={loginProjects}
-        passwordState={getProjectsPasswordState()}
-      />
+      <div className={`${dmSans.variable} projects-theme`}>
+        <ProjectsLogin
+          loginAction={loginProjects}
+          passwordState={getProjectsPasswordState()}
+        />
+      </div>
     );
   }
 
-  return <ProjectsManager currentUser={currentUser} logoutAction={logoutProjects} />;
+  return (
+    <div className={`${dmSans.variable} projects-theme`}>
+      <ProjectsManager currentUser={currentUser} logoutAction={logoutProjects} />
+    </div>
+  );
 }
