@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import {
   AlertCircle,
+  ArrowLeft,
   BarChart3,
   BookOpen,
   Calendar,
@@ -17,7 +18,6 @@ import {
   Eye,
   FileText,
   Filter,
-  Flag,
   Folder,
   FolderKanban,
   FolderOpen,
@@ -403,6 +403,10 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const trackingFields   = useMemo(() => !selectedProject ? [] : data.trackingFields.filter((f) => f.projectId === selectedProject.id).sort((a, b) => a.position - b.position), [data.trackingFields, selectedProject]);
   const projectUpdates   = useMemo(() => !selectedProject ? [] : data.updates.filter((u) => u.projectId === selectedProject.id), [data.updates, selectedProject]);
   const projectInterventions = useMemo(() => !selectedProject ? [] : data.interventions.filter((intervention) => intervention.projectId === selectedProject.id), [data.interventions, selectedProject]);
+  const teamMemberNames = useMemo(
+    () => Array.from(new Set(data.teamUsers.filter((user) => user.isActive).map((user) => user.name.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [data.teamUsers]
+  );
 
   const responsibleOptions = useMemo(() =>
     Array.from(new Set(projectTasks.map((t) => t.responsible.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -882,7 +886,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                       );
                     })}
                   </nav>
-                  {activeTab === "Tâches" && (
+                  {activeTab === "Tâches" && !isTaskEditorOpen && (
                     <div className="mb-1 hidden sm:block">
                       <button onClick={() => { setEditingTask(null); setIsTaskEditorOpen(true); }} type="button"
                         className="projects-btn-secondary flex h-9 items-center gap-1.5 px-3 text-[13px] font-semibold">
@@ -894,7 +898,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               </div>
 
               {/* ── Tab filter bar (Tasks only) ── */}
-              {activeTab === "Tâches" && (
+              {activeTab === "Tâches" && !isTaskEditorOpen && (
                 <div className="space-y-2 border-b border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] px-2 py-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:space-y-0 sm:px-5 sm:py-3">
                   <div className="projects-surface grid w-full grid-cols-5 items-center gap-1 px-1.5 py-1 sm:flex sm:w-auto sm:px-2">
                     <Filter className="hidden h-3 w-3 text-[var(--tsp-text-secondary)] sm:block" />
@@ -950,7 +954,21 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
               {/* ── Tab content ── */}
               {activeTab === "Pilotage" && <PilotageTab nextActionTasks={nextActionTasks} blockedTasks={blockedTasks} project={selectedProject} stats={stats} />}
-              {activeTab === "Tâches"   && <TachesTab groups={taskGroups} onChangeStatus={handleChangeTaskStatus} onDeleteSection={handleDeleteTaskSection} onDeleteTask={handleDeleteTask} onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }} />}
+              {activeTab === "Tâches"   && (
+                isTaskEditorOpen ? (
+                  <TaskEditorPage
+                    defaultProjectId={selectedProject.id}
+                    onClose={() => { setEditingTask(null); setIsTaskEditorOpen(false); }}
+                    onSave={handleSaveTask}
+                    project={selectedProject}
+                    sections={projectSections}
+                    task={editingTask}
+                    teamMembers={teamMemberNames}
+                  />
+                ) : (
+                  <TachesTab groups={taskGroups} onChangeStatus={handleChangeTaskStatus} onDeleteSection={handleDeleteTaskSection} onDeleteTask={handleDeleteTask} onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }} />
+                )
+              )}
               {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
               {activeTab === "Interventions" && <InterventionsTab key={selectedProject.id} interventions={projectInterventions} onAdd={handleAddIntervention} onDelete={handleDeleteIntervention} onUpdate={handleUpdateIntervention} projectId={selectedProject.id} />}
               {activeTab === "Suivi"    && <SuiviTab fields={trackingFields} updates={projectUpdates} project={selectedProject} onAddField={handleAddTracking} onUpdateField={handleUpdateTracking} onDeleteField={handleDeleteTracking} onAddUpdate={handleAddUpdate} onDeleteUpdate={handleDeleteUpdate} />}
@@ -967,17 +985,6 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         </main>
       </div>
 
-      {/* Task editor modal */}
-      {isTaskEditorOpen && selectedProject && (
-        <TaskEditor
-          defaultProjectId={selectedProject.id}
-          onClose={() => { setEditingTask(null); setIsTaskEditorOpen(false); }}
-          onSave={handleSaveTask}
-          projects={data.projects}
-          sections={data.taskSections}
-          task={editingTask}
-        />
-      )}
     </div>
   );
 }
@@ -2546,13 +2553,14 @@ function SaveBadge({ saveState }: { saveState: SaveState }) {
 // ── TASK EDITOR MODAL ───────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function TaskEditor({ defaultProjectId, onClose, onSave, projects, sections, task }: {
+function TaskEditorPage({ defaultProjectId, onClose, onSave, project, sections, task, teamMembers }: {
   defaultProjectId: string;
   onClose: () => void;
   onSave: (draft: Omit<ManagedTask, "id">, taskId?: string) => void;
-  projects: ManagedProject[];
+  project: ManagedProject;
   sections: TaskSection[];
   task: ManagedTask | null;
+  teamMembers: string[];
 }) {
   const [draft, setDraft] = useState<Omit<ManagedTask, "id">>(task ?? buildBlankTask(defaultProjectId));
   const availableSections = useMemo(
@@ -2562,82 +2570,238 @@ function TaskEditor({ defaultProjectId, onClose, onSave, projects, sections, tas
   const selectedSectionId = draft.sectionId && availableSections.some((section) => section.id === draft.sectionId)
     ? draft.sectionId
     : "";
+  const knownResponsibles = useMemo(
+    () => Array.from(new Set([...teamMembers, draft.responsible.trim()].filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [draft.responsible, teamMembers]
+  );
+  const isEditing = Boolean(task);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4">
-      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-[580px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/5 sm:max-h-[calc(100dvh-2rem)]">
-        {/* Header */}
-        <div className="shrink-0 flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">{task ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
-            <p className="mt-0.5 text-xs text-slate-400">Sauvegarde automatique après validation.</p>
+    <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)]">
+      <form
+        className="grid gap-4 p-3 sm:p-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave({ ...draft, projectId: defaultProjectId, sectionId: selectedSectionId || null }, task?.id);
+        }}
+      >
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <button
+                  className="projects-btn-secondary flex h-10 w-10 shrink-0 items-center justify-center"
+                  onClick={onClose}
+                  type="button"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <div className="min-w-0">
+                  <p className="projects-label">Tâches</p>
+                  <h2 className="mt-1 text-[17px] font-bold text-[var(--tsp-text)]">{isEditing ? "Modifier la tâche" : "Nouvelle tâche"}</h2>
+                  <p className="mt-1 text-[13px] text-[var(--tsp-text-secondary)]">
+                    Vue dédiée pour structurer la tâche proprement, sans modal.
+                  </p>
+                </div>
+              </div>
+              <span className="hidden rounded-md bg-[var(--tsp-bg-surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)] sm:inline-flex">
+                {isEditing ? "Mise à jour" : "Création"}
+              </span>
+            </div>
           </div>
-          <button onClick={onClose} type="button" className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); onSave({ ...draft, sectionId: selectedSectionId || null }, task?.id); }} className="grid gap-3 overflow-y-auto px-4 py-4 sm:gap-4 sm:px-6 sm:py-5">
-          {/* Title */}
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Titre</label>
-            <input autoFocus required
-              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-800 placeholder-slate-300 outline-none transition focus:border-[#d9140e]/50 focus:ring-2 focus:ring-[#d9140e]/10"
-              onChange={(e) => setDraft((c) => ({ ...c, title: e.target.value }))}
-              placeholder="Ex : Préparer l'audit SEO" value={draft.title}
+          <div className="projects-surface p-[14px] sm:p-5">
+            <label className="projects-label mb-2 block">Titre</label>
+            <input
+              autoFocus
+              required
+              className="h-11 w-full px-3 text-[13px]"
+              onChange={(e) => setDraft((current) => ({ ...current, title: e.target.value }))}
+              placeholder="Ex : Optimiser les pages département IDF"
+              value={draft.title}
+            />
+
+            <label className="projects-label mb-2 mt-4 block">Détails</label>
+            <textarea
+              className="min-h-[180px] w-full resize-y p-3 text-[13px] leading-[1.5]"
+              onChange={(e) => setDraft((current) => ({ ...current, note: e.target.value }))}
+              placeholder="Contexte, ressources, points d’attention, blocage, prochaine action…"
+              value={draft.note}
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FieldSelect icon={<FolderKanban className="h-3.5 w-3.5" />} label="Projet" onChange={(v) => setDraft((c) => ({ ...c, projectId: v, sectionId: null }))} value={draft.projectId}>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </FieldSelect>
-            <FieldSelect icon={<Columns3 className="h-3.5 w-3.5" />} label="Section" onChange={(v) => setDraft((c) => ({ ...c, sectionId: v || null }))} value={selectedSectionId}>
-              <option value="">Sans section</option>
-              {availableSections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
-            </FieldSelect>
-            <FieldSelect icon={<Columns3 className="h-3.5 w-3.5" />} label="Statut" onChange={(v) => setDraft((c) => ({ ...c, status: v as TaskStatus }))} value={draft.status}>
-              {TASK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </FieldSelect>
-            <FieldSelect icon={<Flag className="h-3.5 w-3.5" />} label="Priorité" onChange={(v) => setDraft((c) => ({ ...c, priority: v as TaskPriority }))} value={draft.priority}>
-              {TASK_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-            </FieldSelect>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500"><User className="h-3.5 w-3.5" /> Responsable</label>
-              <input className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-300 outline-none focus:border-[#d9140e]/50 focus:ring-2 focus:ring-[#d9140e]/10" onChange={(e) => setDraft((c) => ({ ...c, responsible: e.target.value }))} placeholder="Nom ou équipe" value={draft.responsible} />
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="projects-label mb-2 flex items-center gap-1.5"><User className="h-3.5 w-3.5" />Responsable</label>
+                <input
+                  className="h-11 w-full px-3 text-[13px]"
+                  onChange={(e) => setDraft((current) => ({ ...current, responsible: e.target.value }))}
+                  placeholder="Nom ou collaborateur"
+                  value={draft.responsible}
+                />
+              </div>
+              <div>
+                <label className="projects-label mb-2 flex items-center gap-1.5"><Columns3 className="h-3.5 w-3.5" />Section</label>
+                <FieldSelect onChange={(value) => setDraft((current) => ({ ...current, sectionId: value || null }))} value={selectedSectionId}>
+                  <option value="">Sans section</option>
+                  {availableSections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
+                </FieldSelect>
+              </div>
+              <div>
+                <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date début</label>
+                <input
+                  type="date"
+                  className="h-11 w-full px-3 text-[13px]"
+                  onChange={(e) => setDraft((current) => ({ ...current, startDate: e.target.value }))}
+                  value={draft.startDate}
+                />
+              </div>
+              <div>
+                <label className="projects-label mb-2 flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Date limite</label>
+                <input
+                  type="date"
+                  className="h-11 w-full px-3 text-[13px]"
+                  onChange={(e) => setDraft((current) => ({ ...current, dueDate: e.target.value }))}
+                  value={draft.dueDate}
+                />
+              </div>
             </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500"><Calendar className="h-3.5 w-3.5" /> Date début</label>
-              <input type="date" className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/50 focus:ring-2 focus:ring-[#d9140e]/10" onChange={(e) => setDraft((c) => ({ ...c, startDate: e.target.value }))} value={draft.startDate} />
+
+            {!!knownResponsibles.length && (
+              <div className="mt-4">
+                <p className="projects-label mb-2">Responsables suggérés</p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {knownResponsibles.map((name) => {
+                    const isSelected = draft.responsible.trim() === name;
+                    return (
+                      <button
+                        key={name}
+                        className={`flex items-center gap-2 rounded-[10px] border px-3 py-2 text-left transition ${
+                          isSelected
+                            ? "border-[var(--tsp-navy)] bg-[var(--tsp-navy)] text-white"
+                            : "border-[var(--tsp-border)] bg-white text-[var(--tsp-text)]"
+                        }`}
+                        onClick={() => setDraft((current) => ({ ...current, responsible: name }))}
+                        type="button"
+                      >
+                        <span className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${isSelected ? "bg-white/15 text-white" : "bg-[var(--tsp-navy)] text-white"}`}>
+                          {getUserInitials(name)}
+                        </span>
+                        <span className={`truncate text-[13px] font-medium ${isSelected ? "text-white" : "text-[var(--tsp-text)]"}`}>{name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <p className="projects-label mb-2">Projet</p>
+            <div className="projects-surface-soft flex items-center gap-3 px-3 py-3">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: project.color }} />
+              <span className="truncate text-[14px] font-semibold text-[var(--tsp-text)]">{project.name}</span>
             </div>
-            <div>
-              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500"><Calendar className="h-3.5 w-3.5" /> Date limite</label>
-              <input type="date" className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/50 focus:ring-2 focus:ring-[#d9140e]/10" onChange={(e) => setDraft((c) => ({ ...c, dueDate: e.target.value }))} value={draft.dueDate} />
+
+            <div className="mt-4">
+              <p className="projects-label mb-2">Priorité</p>
+              <div className="grid grid-cols-3 gap-2">
+                {TASK_PRIORITIES.map((priority) => {
+                  const active = draft.priority === priority;
+                  return (
+                    <button
+                      key={priority}
+                      className={`flex h-11 items-center justify-center gap-2 rounded-[10px] border text-[12px] font-semibold transition ${active ? PRIORITY_META[priority].cls : "border-[var(--tsp-border)] bg-white text-[var(--tsp-text-secondary)]"}`}
+                      onClick={() => setDraft((current) => ({ ...current, priority }))}
+                      type="button"
+                    >
+                      <span className={`h-2.5 w-2.5 rounded-full ${PRIORITY_META[priority].dot}`} />
+                      {priority}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="projects-label mb-2">Statut initial</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {TASK_STATUSES.map((status) => {
+                  const active = draft.status === status;
+                  return (
+                    <button
+                      key={status}
+                      className="flex h-11 items-center justify-center rounded-[10px] border text-[12px] font-semibold transition"
+                      onClick={() => setDraft((current) => ({ ...current, status }))}
+                      style={active ? STATUS_BADGE_STYLE[status] : { backgroundColor: "#ffffff", borderColor: "rgba(15, 30, 53, 0.11)", color: "#5a6a7e" }}
+                      type="button"
+                    >
+                      {status}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Note</label>
-            <textarea rows={3} className="w-full resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 placeholder-slate-300 outline-none focus:border-[#d9140e]/50 focus:ring-2 focus:ring-[#d9140e]/10" onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Contexte, blocage, prochaine action…" value={draft.note} />
+          <div className="projects-surface p-[14px] sm:p-5">
+            <p className="projects-label mb-3">Résumé</p>
+            <div className="space-y-2">
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Section</span>
+                <span className="text-[13px] font-semibold text-[var(--tsp-text)]">
+                  {availableSections.find((section) => section.id === selectedSectionId)?.name ?? "Sans section"}
+                </span>
+              </div>
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Statut</span>
+                <span className="rounded-md px-2.5 py-1 text-[11px] font-semibold" style={STATUS_BADGE_STYLE[draft.status]}>
+                  {draft.status}
+                </span>
+              </div>
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Priorité</span>
+                <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${PRIORITY_META[draft.priority].cls}`}>
+                  {draft.priority}
+                </span>
+              </div>
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Responsable</span>
+                <span className="truncate text-[13px] font-semibold text-[var(--tsp-text)]">{draft.responsible || "Non assigné"}</span>
+              </div>
+            </div>
           </div>
 
-          <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:m-0 sm:flex-row sm:justify-end sm:border-t-0 sm:bg-transparent sm:p-0">
-            <button onClick={onClose} type="button" className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
-            <button type="submit" className="projects-btn-primary h-10 px-6 text-sm font-semibold">Enregistrer</button>
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <button
+                className="projects-btn-secondary h-11 flex-1 text-[13px] font-semibold"
+                onClick={onClose}
+                type="button"
+              >
+                Annuler
+              </button>
+              <button
+                className="projects-btn-primary h-11 flex-1 text-[13px] font-semibold"
+                type="submit"
+              >
+                {isEditing ? "Enregistrer les changements" : "Créer la tâche"}
+              </button>
+            </div>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }
 
-function FieldSelect({ children, icon, label, onChange, value }: { children: React.ReactNode; icon: React.ReactNode; label: string; onChange: (v: string) => void; value: string }) {
+function FieldSelect({ children, onChange, value }: { children: React.ReactNode; onChange: (v: string) => void; value: string }) {
   return (
-    <div>
-      <label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">{icon}{label}</label>
-      <select className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/50 focus:ring-2 focus:ring-[#d9140e]/10" onChange={(e) => onChange(e.target.value)} value={value}>
-        {children}
-      </select>
-    </div>
+    <select className="h-11 w-full px-3 text-[13px]" onChange={(e) => onChange(e.target.value)} value={value}>
+      {children}
+    </select>
   );
 }
