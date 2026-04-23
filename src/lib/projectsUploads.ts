@@ -39,6 +39,10 @@ export function getDocVirtualPath(projectId: string, filename: string) {
   return `/uploads/docs/${sanitizeProjectUploadId(projectId)}/${filename}`;
 }
 
+export function getTaskVirtualPath(projectId: string, filename: string) {
+  return `/uploads/tasks/${sanitizeProjectUploadId(projectId)}/${filename}`;
+}
+
 export function getManagedDocsUploadDir(projectId: string) {
   return path.join(
     getProjectsAppRoot(),
@@ -49,8 +53,22 @@ export function getManagedDocsUploadDir(projectId: string) {
   );
 }
 
+export function getManagedTaskUploadDir(projectId: string) {
+  return path.join(
+    getProjectsAppRoot(),
+    "data",
+    "uploads",
+    "tasks",
+    sanitizeProjectUploadId(projectId)
+  );
+}
+
 function getExpectedDocAssetPrefix(projectId: string) {
   return `/uploads/docs/${sanitizeProjectUploadId(projectId)}/`;
+}
+
+function getExpectedTaskAssetPrefix(projectId: string) {
+  return `/uploads/tasks/${sanitizeProjectUploadId(projectId)}/`;
 }
 
 export function resolveManagedDocUploadPath(projectId: string, assetPath: string) {
@@ -73,6 +91,38 @@ export function resolveLegacyPublicDocUploadPath(
 ) {
   const normalizedPath = normalizeDocAssetPath(assetPath);
   const expectedPrefix = getExpectedDocAssetPrefix(projectId);
+
+  if (!normalizedPath || !normalizedPath.startsWith(expectedPrefix)) {
+    return null;
+  }
+
+  return path.join(
+    getProjectsAppRoot(),
+    "public",
+    ...normalizedPath.split("/").filter(Boolean)
+  );
+}
+
+export function resolveManagedTaskUploadPath(projectId: string, assetPath: string) {
+  const normalizedPath = normalizeDocAssetPath(assetPath);
+  const expectedPrefix = getExpectedTaskAssetPrefix(projectId);
+
+  if (!normalizedPath || !normalizedPath.startsWith(expectedPrefix)) {
+    return null;
+  }
+
+  return path.join(
+    getManagedTaskUploadDir(projectId),
+    path.posix.basename(normalizedPath)
+  );
+}
+
+export function resolveLegacyPublicTaskUploadPath(
+  projectId: string,
+  assetPath: string
+) {
+  const normalizedPath = normalizeDocAssetPath(assetPath);
+  const expectedPrefix = getExpectedTaskAssetPrefix(projectId);
 
   if (!normalizedPath || !normalizedPath.startsWith(expectedPrefix)) {
     return null;

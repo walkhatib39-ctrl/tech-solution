@@ -225,6 +225,28 @@ function isImageAttachmentMimeType(mimeType: string) {
   return mimeType.startsWith("image/");
 }
 
+function getTaskAttachmentUrl(
+  projectId: string,
+  attachment: TaskAttachment,
+  options?: { download?: boolean }
+) {
+  if (!attachment.path) {
+    return "";
+  }
+
+  const searchParams = new URLSearchParams({
+    name: attachment.name,
+    path: attachment.path,
+    projectId,
+  });
+
+  if (options?.download) {
+    searchParams.set("download", "1");
+  }
+
+  return `/api/projects/tasks/file?${searchParams.toString()}`;
+}
+
 function formatAttachmentSize(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
@@ -4831,29 +4853,43 @@ function TaskPreviewPage({
                 </div>
               </div>
               <div className="mt-4 space-y-2">
-                {task.attachments.map((attachment) => (
-                  <a
-                    key={attachment.path}
-                    className="projects-surface-soft flex items-center gap-3 px-3 py-3 transition hover:bg-white"
-                    href={attachment.path}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
-                      {isImageAttachmentMimeType(attachment.mimeType) ? (
-                        <Image alt={attachment.name} className="object-cover" fill sizes="48px" src={attachment.path} />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[var(--tsp-text-secondary)]">
-                          <FileText className="h-5 w-5" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12px] font-semibold text-[var(--tsp-text)]">{attachment.name}</p>
-                      <p className="mt-0.5 text-[11px] text-[var(--tsp-text-secondary)]">{formatAttachmentSize(attachment.size)}</p>
-                    </div>
-                  </a>
-                ))}
+                {task.attachments.map((attachment) => {
+                  const attachmentUrl = getTaskAttachmentUrl(
+                    task.projectId,
+                    attachment
+                  );
+
+                  return (
+                    <a
+                      key={attachment.path}
+                      className="projects-surface-soft flex items-center gap-3 px-3 py-3 transition hover:bg-white"
+                      href={attachmentUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
+                        {isImageAttachmentMimeType(attachment.mimeType) ? (
+                          <Image
+                            alt={attachment.name}
+                            className="object-cover"
+                            fill
+                            sizes="48px"
+                            src={attachmentUrl}
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[var(--tsp-text-secondary)]">
+                            <FileText className="h-5 w-5" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[12px] font-semibold text-[var(--tsp-text)]">{attachment.name}</p>
+                        <p className="mt-0.5 text-[11px] text-[var(--tsp-text-secondary)]">{formatAttachmentSize(attachment.size)}</p>
+                      </div>
+                    </a>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -5222,6 +5258,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
                         attachments: current.attachments.filter((item) => item.path !== attachment.path),
                       }))
                     }
+                    projectId={draft.projectId}
                   />
                 ))}
                 {pendingFiles.map((pendingFile) => (
@@ -5326,13 +5363,17 @@ function TaskAttachmentCard({
   isPending,
   onRemove,
   previewOverride,
+  projectId,
 }: {
   attachment: TaskAttachment;
   isPending?: boolean;
   onRemove: () => void;
   previewOverride?: string | null;
+  projectId?: string;
 }) {
-  const previewSrc = previewOverride || attachment.path;
+  const previewSrc =
+    previewOverride ||
+    (projectId ? getTaskAttachmentUrl(projectId, attachment) : attachment.path);
   const isImage = isImageAttachmentMimeType(attachment.mimeType);
 
   return (

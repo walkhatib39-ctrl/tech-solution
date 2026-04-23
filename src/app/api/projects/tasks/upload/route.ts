@@ -6,6 +6,10 @@ import {
   isProjectsAuthError,
   requireProjectsAuth,
 } from "@/lib/projectsAuth";
+import {
+  getManagedTaskUploadDir,
+  getTaskVirtualPath,
+} from "@/lib/projectsUploads";
 import { getProjectsDataForUser } from "@/lib/projectsStore";
 
 export const runtime = "nodejs";
@@ -22,10 +26,6 @@ const MAX_FILE_SIZE = 12 * 1024 * 1024;
 
 function unauthorizedResponse() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-
-function sanitizeProjectId(projectId: string) {
-  return projectId.replace(/[^a-zA-Z0-9_-]/g, "") || "project";
 }
 
 function sanitizeFilename(name: string) {
@@ -78,13 +78,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const uploadDir = path.join(
-      process.cwd(),
-      "public",
-      "uploads",
-      "tasks",
-      sanitizeProjectId(projectId)
-    );
+    const uploadDir = getManagedTaskUploadDir(projectId);
 
     await mkdir(uploadDir, { recursive: true });
 
@@ -108,7 +102,7 @@ export async function POST(request: NextRequest) {
       const extension = getExtension(file);
       const filename = `${Date.now()}-${randomUUID()}${extension}`;
       const diskPath = path.join(uploadDir, filename);
-      const publicPath = `/uploads/tasks/${sanitizeProjectId(projectId)}/${filename}`;
+      const publicPath = getTaskVirtualPath(projectId, filename);
 
       await writeFile(diskPath, Buffer.from(await file.arrayBuffer()));
       attachments.push({
