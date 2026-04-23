@@ -781,7 +781,14 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                   <div className="flex items-start gap-2.5 sm:gap-3">
                     <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full shadow-sm sm:h-3 sm:w-3" style={{ backgroundColor: selectedProject.color }} />
                     <div className="min-w-0">
-                      <h1 className="truncate text-[22px] font-bold leading-tight text-slate-900 sm:text-xl lg:text-2xl">{selectedProject.name}</h1>
+                      <div
+                        aria-level={1}
+                        className="truncate font-bold leading-[1.05] text-slate-900"
+                        role="heading"
+                        style={{ fontSize: "clamp(1.15rem, 1.3rem + 1vw, 2.25rem)", letterSpacing: 0 }}
+                      >
+                        {selectedProject.name}
+                      </div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <TypeBadge type={selectedProject.type} />
                         <StatusBadge status={selectedProject.status} />
