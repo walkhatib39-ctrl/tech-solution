@@ -158,7 +158,7 @@ function getPriorityWeight(p: TaskPriority) {
 
 function buildBlankTask(projectId: string): Omit<ManagedTask, "id"> {
   return { title: "", projectId, status: "À faire", priority: "Moyenne",
-           sectionId: null, startDate: "", dueDate: "", note: "", responsible: "", attachments: [] };
+           sectionId: null, startDate: "", dueDate: "", note: "", responsible: "", createdAt: "", createdBy: "", attachments: [] };
 }
 
 function buildBlankIntervention(projectId: string): Omit<ProjectIntervention, "id"> {
@@ -244,6 +244,28 @@ function formatTaskShortDate(value: string) {
     month: "short",
   }).format(date);
   return formatted.replace(/\.$/, "").replace(/^(\d+\s+)(\p{L})/u, (_, prefix, firstLetter) => `${prefix}${String(firstLetter).toUpperCase()}`);
+}
+
+function parseProjectDate(value: string) {
+  if (!value) return null;
+  const normalized =
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? `${value}T00:00:00`
+      : value.includes(" ") && !value.includes("T")
+        ? value.replace(" ", "T")
+        : value;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatTaskLongDate(value: string) {
+  const date = parseProjectDate(value);
+  if (!date) return "";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
 }
 
 function formatTaskDateRange(task: ManagedTask) {
@@ -531,10 +553,13 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
   const handleSaveTask = (draft: Omit<ManagedTask, "id">, taskId?: string) => {
     if (!draft.title.trim()) return;
+    const existingTask = taskId ? data.tasks.find((task) => task.id === taskId) : null;
     const savedTask: ManagedTask = {
       ...draft,
       id: taskId ?? createId("task"),
       title: draft.title.trim(),
+      createdAt: existingTask?.createdAt || draft.createdAt || new Date().toISOString(),
+      createdBy: existingTask?.createdBy || draft.createdBy || currentUser.name,
     };
     if (taskId) {
       updateData((c) => ({ ...c, tasks: c.tasks.map((t) => t.id === taskId ? savedTask : t) }));
@@ -2651,6 +2676,24 @@ function TaskPreviewPage({
   task: ManagedTask;
 }) {
   const dateRange = formatTaskDateRange(task);
+  const createdDate = formatTaskLongDate(task.createdAt);
+  const executionDate = formatTaskLongDate(task.startDate);
+  const deadlineDate = formatTaskLongDate(task.dueDate);
+  const creationDetails = [
+    createdDate ? `créée le ${createdDate}` : "",
+    task.createdBy ? `par ${task.createdBy}` : "",
+  ].filter(Boolean);
+  const executionDetails = [
+    task.responsible ? `assignée à ${task.responsible}` : "",
+    executionDate ? `prévue pour démarrer le ${executionDate}` : "",
+    deadlineDate ? `avec une deadline au ${deadlineDate}` : "",
+  ].filter(Boolean);
+  const summarySentences = [
+    creationDetails.length ? `Cette tâche a été ${creationDetails.join(" ")}.` : "",
+    executionDetails.length ? `Elle est ${executionDetails.join(" ")}.` : "",
+    `Elle est marquée comme priorité ${task.priority.toLowerCase()} et actuellement ${task.status.toLowerCase()}.`,
+    sectionName && sectionName !== "Sans section" ? `Elle appartient à la section ${sectionName}.` : "",
+  ].filter(Boolean);
 
   return (
     <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] p-3 sm:p-5">
@@ -2703,25 +2746,21 @@ function TaskPreviewPage({
             </div>
           </div>
 
-          <div className="projects-surface p-[14px] sm:p-5">
-            <p className="projects-label mb-2">Description</p>
-            {task.note ? (
+          {task.note ? (
+            <div className="projects-surface p-[14px] sm:p-5">
+              <p className="projects-label mb-2">Description</p>
               <p className="whitespace-pre-wrap text-[13px] leading-[1.6] text-[var(--tsp-text-secondary)]">{task.note}</p>
-            ) : (
-              <div className="projects-surface-soft px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
-                Aucune note sur cette tâche.
-              </div>
-            )}
-          </div>
-
-          <div className="projects-surface p-[14px] sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="projects-label mb-1 flex items-center gap-1.5"><Paperclip className="h-3.5 w-3.5" />Pièces jointes</p>
-                <p className="text-[12px] text-[var(--tsp-text-secondary)]">{task.attachments.length} fichier{task.attachments.length > 1 ? "s" : ""}</p>
-              </div>
             </div>
-            {task.attachments.length ? (
+          ) : null}
+
+          {task.attachments.length ? (
+            <div className="projects-surface p-[14px] sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="projects-label mb-1 flex items-center gap-1.5"><Paperclip className="h-3.5 w-3.5" />Pièces jointes</p>
+                  <p className="text-[12px] text-[var(--tsp-text-secondary)]">{task.attachments.length} fichier{task.attachments.length > 1 ? "s" : ""}</p>
+                </div>
+              </div>
               <div className="mt-4 space-y-2">
                 {task.attachments.map((attachment) => (
                   <a
@@ -2747,41 +2786,38 @@ function TaskPreviewPage({
                   </a>
                 ))}
               </div>
-            ) : (
-              <div className="projects-surface-soft mt-4 px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
-                Aucune pièce jointe pour cette tâche.
-              </div>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-4">
           <div className="projects-surface p-[14px] sm:p-5">
             <p className="projects-label mb-3">Informations</p>
-            <div className="space-y-2">
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Section</span>
-                <span className="truncate text-[13px] font-semibold text-[var(--tsp-text)]">{sectionName || "Sans section"}</span>
+            <div className="projects-surface-soft px-3 py-3.5">
+              <div className="space-y-2">
+                {summarySentences.map((sentence, index) => (
+                  <p key={`${task.id}-summary-${index}`} className="text-[13px] leading-[1.65] text-[var(--tsp-text-secondary)]">
+                    {sentence}
+                  </p>
+                ))}
               </div>
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Statut</span>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {sectionName && sectionName !== "Sans section" ? (
+                  <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text)]">
+                    {sectionName}
+                  </span>
+                ) : null}
                 <span className="rounded-md px-2.5 py-1 text-[11px] font-semibold" style={STATUS_BADGE_STYLE[task.status]}>
                   {task.status}
                 </span>
-              </div>
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Priorité</span>
                 <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${PRIORITY_META[task.priority].cls}`}>
                   {task.priority}
                 </span>
-              </div>
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Responsable</span>
-                <span className="truncate text-[13px] font-semibold text-[var(--tsp-text)]">{task.responsible || "Non assigné"}</span>
-              </div>
-              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
-                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Période</span>
-                <span className="text-right text-[13px] font-semibold text-[var(--tsp-text)]">{dateRange}</span>
+                {dateRange !== "Dates à préciser" ? (
+                  <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                    {dateRange}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>

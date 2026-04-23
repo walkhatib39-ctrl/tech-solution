@@ -70,6 +70,8 @@ export interface ManagedTask {
   dueDate: string;
   note: string;
   responsible: string;
+  createdAt: string;
+  createdBy: string;
   attachments: TaskAttachment[];
 }
 

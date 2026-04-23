@@ -208,6 +208,23 @@ function toNullableDate(value: string) {
   return value ? value : null;
 }
 
+function toNullableDateTime(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
 function fromDate(value: unknown) {
   if (!value) {
     return "";
@@ -316,6 +333,8 @@ function normalizeTask(task: Partial<ManagedTask>): ManagedTask | null {
     dueDate: typeof task.dueDate === "string" ? task.dueDate : "",
     note: typeof task.note === "string" ? task.note : "",
     responsible: typeof task.responsible === "string" ? task.responsible : "",
+    createdAt: typeof task.createdAt === "string" ? task.createdAt : "",
+    createdBy: typeof task.createdBy === "string" ? task.createdBy.trim() : "",
     attachments: Array.isArray(task.attachments)
       ? task.attachments
           .map((attachment) => normalizeTaskAttachment(attachment))
@@ -861,6 +880,8 @@ async function ensureProjectsSchema() {
         due_date DATE NULL,
         note TEXT NULL,
         responsible VARCHAR(190) NULL,
+        created_on DATETIME NULL,
+        created_by VARCHAR(190) NULL,
         attachments_json LONGTEXT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -900,6 +921,41 @@ async function ensureProjectsSchema() {
       await pool.query(`
         ALTER TABLE tasks
           ADD COLUMN attachments_json LONGTEXT NULL AFTER responsible
+      `);
+    }
+
+    const [taskCreatedOnColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'created_on'`
+    );
+
+    if (taskCreatedOnColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN created_on DATETIME NULL AFTER responsible
+      `);
+      await pool.query(`
+        UPDATE tasks
+        SET created_on = created_at
+        WHERE created_on IS NULL
+      `);
+    }
+
+    const [taskCreatedByColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'tasks'
+         AND COLUMN_NAME = 'created_by'`
+    );
+
+    if (taskCreatedByColumnRows.length === 0) {
+      await pool.query(`
+        ALTER TABLE tasks
+          ADD COLUMN created_by VARCHAR(190) NULL AFTER created_on
       `);
     }
 
@@ -1225,8 +1281,8 @@ async function saveProjectsDataWithoutSchema(
   for (const task of data.tasks) {
     await queryable.execute(
       `INSERT INTO tasks
-        (id, project_id, section_id, title, status, priority, start_date, due_date, note, responsible, attachments_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, section_id, title, status, priority, start_date, due_date, note, responsible, created_on, created_by, attachments_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         task.id,
         task.projectId,
@@ -1238,6 +1294,8 @@ async function saveProjectsDataWithoutSchema(
         toNullableDate(task.dueDate),
         task.note,
         task.responsible,
+        toNullableDateTime(task.createdAt),
+        task.createdBy || null,
         JSON.stringify(task.attachments),
       ]
     );
@@ -1370,6 +1428,8 @@ export async function getProjectsData(): Promise<ProjectsData> {
       due_date AS dueDate,
       note,
       responsible,
+      created_on AS createdAt,
+      created_by AS createdBy,
       attachments_json AS attachmentsJson
      FROM tasks
      ORDER BY created_at ASC`
@@ -1480,6 +1540,8 @@ export async function getProjectsData(): Promise<ProjectsData> {
       dueDate: fromDate(row.dueDate),
       note: String(row.note ?? ""),
       responsible: String(row.responsible ?? ""),
+      createdAt: typeof row.createdAt === "string" ? String(row.createdAt) : "",
+      createdBy: String(row.createdBy ?? ""),
       attachments: (() => {
         try {
           const parsed = JSON.parse(String(row.attachmentsJson ?? "[]"));
