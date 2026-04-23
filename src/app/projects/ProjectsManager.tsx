@@ -558,8 +558,12 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       ...draft,
       id: taskId ?? createId("task"),
       title: draft.title.trim(),
-      createdAt: existingTask?.createdAt || draft.createdAt || new Date().toISOString(),
-      createdBy: existingTask?.createdBy || draft.createdBy || currentUser.name,
+      createdAt: existingTask
+        ? existingTask.createdAt || draft.createdAt || ""
+        : draft.createdAt || new Date().toISOString(),
+      createdBy: existingTask
+        ? existingTask.createdBy || draft.createdBy || ""
+        : draft.createdBy || currentUser.name,
     };
     if (taskId) {
       updateData((c) => ({ ...c, tasks: c.tasks.map((t) => t.id === taskId ? savedTask : t) }));
