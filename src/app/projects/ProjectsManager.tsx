@@ -733,7 +733,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         {/* Top bar */}
-        <header className="projects-topbar flex h-[56px] shrink-0 items-center justify-between gap-3 px-3 sm:px-5">
+        <header className="projects-topbar hidden h-[56px] shrink-0 items-center justify-between gap-3 px-3 sm:flex sm:px-5">
           <div className="flex min-w-0 items-center gap-2 text-[13px]">
             <button
               aria-label="Ouvrir le menu"
@@ -761,7 +761,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-auto p-2 sm:p-4">
+        <main className="flex-1 overflow-auto p-0 sm:p-4">
           {isLoading ? (
             <div className="projects-shell flex min-h-[400px] items-center justify-center">
               <div className="flex items-center gap-3 text-sm text-slate-400">
@@ -775,10 +775,32 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               <button onClick={() => void loadData()} className="projects-btn-primary px-5 py-2 text-sm font-semibold">Réessayer</button>
             </div>
           ) : workspaceView === "team" && isSuperAdmin ? (
-            <div className="projects-shell">
-              <div className="border-b border-[var(--tsp-border)] bg-[var(--tsp-navy)] px-5 py-5 text-white">
+            <div className="projects-shell rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
+              <div className="border-b border-[var(--tsp-border)] bg-[var(--tsp-navy)] px-4 py-4 text-white sm:px-5 sm:py-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start justify-between gap-3 sm:hidden">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white sm:hidden">
+                        <Users className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div aria-level={1} role="heading" className="text-[17px] font-bold text-white">Équipe</div>
+                        <p className="mt-1 text-[12px] text-white/[0.45]">Gérer les membres et les projets visibles par chacun.</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 sm:hidden">
+                      <SaveBadge saveState={saveState} />
+                      <button
+                        aria-label="Ouvrir le menu"
+                        className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white"
+                        onClick={() => setIsSidebarOpen(true)}
+                        type="button"
+                      >
+                        <Menu className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="hidden items-start gap-3 sm:flex">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white">
                       <Users className="h-4 w-4" />
                     </div>
@@ -804,27 +826,42 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               />
             </div>
           ) : selectedProject ? (
-            <div className="projects-shell">
+            <div className="projects-shell rounded-none border-x-0 border-t-0 sm:rounded-[20px] sm:border-x sm:border-t">
 
               {/* ── Project header ── */}
-              <div className="border-b border-white/[0.08] bg-[var(--tsp-navy)] px-3 pt-4 pb-0 text-white sm:px-5 sm:pt-5">
+              <div className="border-b border-white/[0.08] bg-[var(--tsp-navy)] px-4 pt-4 pb-0 text-white sm:px-5 sm:pt-5">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   {/* Title + meta */}
-                  <div className="flex items-start gap-2.5 sm:gap-3">
-                    <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full sm:h-3 sm:w-3" style={{ backgroundColor: selectedProject.color }} />
-                    <div className="min-w-0">
-                      <div
-                        aria-level={1}
-                        className="truncate font-bold leading-[1.05] text-white"
-                        role="heading"
-                        style={{ fontSize: "clamp(1.15rem, 1.05rem + 1.35vw, 2rem)", letterSpacing: 0 }}
-                      >
-                        {selectedProject.name}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-2.5 sm:gap-3">
+                        <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full sm:h-3 sm:w-3" style={{ backgroundColor: selectedProject.color }} />
+                        <div className="min-w-0">
+                          <div
+                            aria-level={1}
+                            className="truncate font-bold leading-[1.1] text-white"
+                            role="heading"
+                            style={{ fontSize: "clamp(1rem, 0.95rem + 0.8vw, 1.6rem)", letterSpacing: 0 }}
+                          >
+                            {selectedProject.name}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <TypeBadge type={selectedProject.type} />
+                            <StatusBadge status={selectedProject.status} />
+                            <span className="text-[12px] text-white/[0.55]">{projectTasks.length} tâche{projectTasks.length > 1 ? "s" : ""}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <TypeBadge type={selectedProject.type} />
-                        <StatusBadge status={selectedProject.status} />
-                        <span className="text-[12px] text-white/[0.55]">{projectTasks.length} tâche{projectTasks.length > 1 ? "s" : ""}</span>
+                      <div className="flex items-center gap-2 sm:hidden">
+                        <SaveBadge saveState={saveState} />
+                        <button
+                          aria-label="Ouvrir le menu"
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.08] text-white"
+                          onClick={() => setIsSidebarOpen(true)}
+                          type="button"
+                        >
+                          <Menu className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2475,12 +2512,10 @@ function TeamTab({ onAddUser, onToggleProjectAccess, onUpdateUser, projectAccess
 // ── SHARED ATOMS ────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function StatPill({ label, value, color, icon }: { label: string; value: number; color: "slate"|"emerald"|"red"|"amber"; icon: React.ReactNode }) {
-  const colors = { slate: "text-white/[0.55]", emerald: "text-[#34d399]", red: "text-[#f87171]", amber: "text-[#fbbf24]" };
+function StatPill({ label, value, color }: { label: string; value: number; color: "slate"|"emerald"|"red"|"amber"; icon?: React.ReactNode }) {
   const numColors = { slate: "text-white", emerald: "text-white", red: value > 0 ? "text-white" : "text-white/40", amber: value > 0 ? "text-white" : "text-white/40" };
   return (
     <div className="projects-kpi-dark flex min-w-0 flex-col items-center gap-0.5 px-1.5 py-2 sm:min-w-[74px] sm:px-3.5 sm:py-2.5">
-      <span className={`${colors[color]}`}>{icon}</span>
       <span className={`text-base font-bold sm:text-lg ${numColors[color]}`}>{value}</span>
       <span className="max-w-full truncate text-[10px] font-medium text-white/[0.45]">{label}</span>
     </div>
