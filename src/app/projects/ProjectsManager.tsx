@@ -572,7 +572,14 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
       .filter(
         (user) =>
           user.isActive &&
-          data.projectAccess.some((access) => access.userId === user.id && access.projectId === selectedProject.id)
+          (
+            user.role === "super_admin" ||
+            data.projectAccess.some(
+              (access) =>
+                access.userId === user.id &&
+                access.projectId === selectedProject.id
+            )
+          )
       )
       .map((user) => user.name.trim())
       .filter(Boolean);
