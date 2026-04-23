@@ -83,6 +83,7 @@ export interface ManagedTask {
   completedAt: string;
   completedBy: string;
   attachments: TaskAttachment[];
+  attachmentsTouched?: boolean;
 }
 
 export interface TaskAttachment {

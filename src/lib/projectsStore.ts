@@ -356,6 +356,7 @@ function normalizeTask(task: Partial<ManagedTask>): ManagedTask | null {
           .map((attachment) => normalizeTaskAttachment(attachment))
           .filter((attachment): attachment is TaskAttachment => Boolean(attachment))
       : [],
+    attachmentsTouched: task.attachmentsTouched === true,
   };
 }
 
@@ -993,6 +994,7 @@ function applyTaskAuditTrail(
     if (!current) {
       const createdTask: ManagedTask = {
         ...task,
+        attachmentsTouched: false,
         createdAt: now,
         createdBy: actor.name,
         updatedAt: now,
@@ -1020,12 +1022,22 @@ function applyTaskAuditTrail(
       return createdTask;
     }
 
+    const shouldPreserveCurrentAttachments =
+      !task.attachmentsTouched && current.attachments.length > 0;
+    const nextAttachments = shouldPreserveCurrentAttachments
+      ? current.attachments
+      : task.attachments;
+    const effectiveTask: ManagedTask = {
+      ...task,
+      attachments: nextAttachments,
+      attachmentsTouched: false,
+    };
     const { contentChanged, responsibleChanged, statusChanged } =
-      getTaskEditableChanges(current, task);
+      getTaskEditableChanges(current, effectiveTask);
     const taskChanged = contentChanged || responsibleChanged || statusChanged;
 
     const nextTask: ManagedTask = {
-      ...task,
+      ...effectiveTask,
       createdAt: current.createdAt || task.createdAt || "",
       createdBy: current.createdBy || task.createdBy || "",
       updatedAt: taskChanged ? now : current.updatedAt || task.updatedAt || "",

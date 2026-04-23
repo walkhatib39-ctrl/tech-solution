@@ -188,7 +188,7 @@ function buildBlankTask(projectId: string): Omit<ManagedTask, "id"> {
            sectionId: null, startDate: "", startTime: "", dueDate: "", dueTime: "", note: "", responsible: "",
            createdAt: "", createdBy: "", updatedAt: "", updatedBy: "",
            statusChangedAt: "", statusChangedBy: "", completedAt: "", completedBy: "",
-           attachments: [] };
+           attachments: [], attachmentsTouched: false };
 }
 
 function buildBlankIntervention(projectId: string): Omit<ProjectIntervention, "id"> {
@@ -901,10 +901,16 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     const existingTask = taskId ? data.tasks.find((task) => task.id === taskId) : null;
     const now = new Date().toISOString();
     const statusChanged = existingTask ? existingTask.status !== draft.status : true;
+    const nextAttachments =
+      existingTask && !draft.attachmentsTouched
+        ? existingTask.attachments
+        : draft.attachments;
     const savedTask: ManagedTask = {
       ...draft,
       id: taskId ?? createId("task"),
       title: draft.title.trim(),
+      attachments: nextAttachments,
+      attachmentsTouched: false,
       createdAt: existingTask
         ? existingTask.createdAt || draft.createdAt || ""
         : draft.createdAt || now,
@@ -5005,6 +5011,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
           ...draft,
           projectId: defaultProjectId,
           sectionId: selectedSectionId || null,
+          attachmentsTouched: draft.attachmentsTouched || uploadedAttachments.length > 0,
           attachments: [...draft.attachments, ...uploadedAttachments],
         },
         task?.id
@@ -5255,6 +5262,7 @@ function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, tea
                     onRemove={() =>
                       setDraft((current) => ({
                         ...current,
+                        attachmentsTouched: true,
                         attachments: current.attachments.filter((item) => item.path !== attachment.path),
                       }))
                     }
