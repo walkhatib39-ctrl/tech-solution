@@ -347,6 +347,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [isLoading, setIsLoading] = useState(true);
   const [isTaskEditorOpen, setIsTaskEditorOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ManagedTask | null>(null);
+  const [previewTaskId, setPreviewTaskId] = useState("");
   const [showAddProject, setShowAddProject] = useState(false);
   const [projectForm, setProjectForm] = useState<ProjectFormState>({ name: "", color: "#1e3a5f" });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -430,6 +431,10 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const trackingFields   = useMemo(() => !selectedProject ? [] : data.trackingFields.filter((f) => f.projectId === selectedProject.id).sort((a, b) => a.position - b.position), [data.trackingFields, selectedProject]);
   const projectUpdates   = useMemo(() => !selectedProject ? [] : data.updates.filter((u) => u.projectId === selectedProject.id), [data.updates, selectedProject]);
   const projectInterventions = useMemo(() => !selectedProject ? [] : data.interventions.filter((intervention) => intervention.projectId === selectedProject.id), [data.interventions, selectedProject]);
+  const previewTask = useMemo(
+    () => projectTasks.find((task) => task.id === previewTaskId) ?? null,
+    [previewTaskId, projectTasks]
+  );
   const projectMemberNames = useMemo(() => {
     if (!selectedProject) return [];
 
@@ -525,15 +530,29 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
   const handleSaveTask = (draft: Omit<ManagedTask, "id">, taskId?: string) => {
     if (!draft.title.trim()) return;
+    const savedTask: ManagedTask = {
+      ...draft,
+      id: taskId ?? createId("task"),
+      title: draft.title.trim(),
+    };
     if (taskId) {
-      updateData((c) => ({ ...c, tasks: c.tasks.map((t) => t.id === taskId ? { ...t, ...draft, title: draft.title.trim() } : t) }));
+      updateData((c) => ({ ...c, tasks: c.tasks.map((t) => t.id === taskId ? savedTask : t) }));
     } else {
-      updateData((c) => ({ ...c, tasks: [...c.tasks, { ...draft, id: createId("task"), title: draft.title.trim() }] }));
+      updateData((c) => ({ ...c, tasks: [...c.tasks, savedTask] }));
     }
-    setEditingTask(null); setIsTaskEditorOpen(false);
+    setEditingTask(null);
+    setIsTaskEditorOpen(false);
+    setPreviewTaskId(savedTask.id);
   };
 
-  const handleDeleteTask        = (id: string) => updateData((c) => ({ ...c, tasks: c.tasks.filter((t) => t.id !== id) }));
+  const handleDeleteTask        = (id: string) => {
+    if (previewTaskId === id) setPreviewTaskId("");
+    if (editingTask?.id === id) {
+      setEditingTask(null);
+      setIsTaskEditorOpen(false);
+    }
+    updateData((c) => ({ ...c, tasks: c.tasks.filter((t) => t.id !== id) }));
+  };
   const handleChangeTaskStatus  = (id: string, status: TaskStatus) => updateData((c) => ({ ...c, tasks: c.tasks.map((t) => t.id === id ? { ...t, status } : t) }));
   const handleAddTaskSection    = (pid: string, name: string) => {
     if (!name.trim()) return;
@@ -905,7 +924,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     </div>
                   </div>
                   {/* Stats row */}
-                  {!(activeTab === "Tâches" && isTaskEditorOpen) && (
+                  {!(activeTab === "Tâches" && (isTaskEditorOpen || previewTask)) && (
                     <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-3 lg:justify-end">
                       <StatPill label="Total"     value={stats.total}   color="slate"   icon={<Columns3    className="h-3.5 w-3.5" />} />
                       <StatPill label="Terminées" value={stats.done}    color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
@@ -941,7 +960,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               </div>
 
               {/* ── Tab filter bar (Tasks only) ── */}
-              {activeTab === "Tâches" && !isTaskEditorOpen && (
+              {activeTab === "Tâches" && !isTaskEditorOpen && !previewTask && (
                 <div className="space-y-2 border-b border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] px-2 py-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:space-y-0 sm:px-5 sm:py-3">
                   <div className="projects-surface grid w-full grid-cols-5 items-center gap-1 px-1.5 py-1 sm:flex sm:w-auto sm:px-2">
                     <Filter className="hidden h-3 w-3 text-[var(--tsp-text-secondary)] sm:block" />
@@ -1007,8 +1026,27 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     task={editingTask}
                     teamMembers={projectMemberNames}
                   />
+                ) : previewTask ? (
+                  <TaskPreviewPage
+                    onBack={() => setPreviewTaskId("")}
+                    onDelete={() => handleDeleteTask(previewTask.id)}
+                    onEdit={() => {
+                      setEditingTask(previewTask);
+                      setPreviewTaskId("");
+                      setIsTaskEditorOpen(true);
+                    }}
+                    sectionName={projectSections.find((section) => section.id === previewTask.sectionId)?.name ?? ""}
+                    task={previewTask}
+                  />
                 ) : (
-                  <TachesTab groups={taskGroups} onChangeStatus={handleChangeTaskStatus} onDeleteSection={handleDeleteTaskSection} onDeleteTask={handleDeleteTask} onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }} />
+                  <TachesTab
+                    groups={taskGroups}
+                    onChangeStatus={handleChangeTaskStatus}
+                    onDeleteSection={handleDeleteTaskSection}
+                    onDeleteTask={handleDeleteTask}
+                    onEditTask={(t) => { setEditingTask(t); setIsTaskEditorOpen(true); }}
+                    onPreviewTask={(t) => setPreviewTaskId(t.id)}
+                  />
                 )
               )}
               {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
@@ -1170,12 +1208,13 @@ function TaskCard({ task }: { task: ManagedTask }) {
 // ── TÂCHES TAB ──────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEditTask }: {
+function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEditTask, onPreviewTask }: {
   groups: TaskSectionGroup[];
   onChangeStatus: (id: string, s: TaskStatus) => void;
   onDeleteSection: (id: string) => void;
   onDeleteTask: (id: string) => void;
   onEditTask: (t: ManagedTask) => void;
+  onPreviewTask: (t: ManagedTask) => void;
 }) {
   const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
 
@@ -1219,6 +1258,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
                     onChangeStatus={onChangeStatus}
                     onDeleteTask={onDeleteTask}
                     onEditTask={onEditTask}
+                    onPreviewTask={onPreviewTask}
                     task={task}
                   />
                 ))}
@@ -1281,7 +1321,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
                 {/* Title */}
                 <div className="flex items-center gap-2.5 min-w-0 pr-4">
                   <span className={`h-2 w-2 shrink-0 rounded-full ${sm.dot}`} />
-                  <button onClick={() => onEditTask(task)} type="button"
+                  <button onClick={() => onPreviewTask(task)} type="button"
                     className={`truncate text-sm font-semibold transition hover:text-[#d9140e] ${isDone ? "line-through decoration-slate-400 decoration-2 text-slate-400" : "text-slate-800"}`}>
                     {task.title}
                   </button>
@@ -1369,10 +1409,11 @@ function MobileSectionHeader({ color, count, isOpen, name, onToggle }: {
   );
 }
 
-function MobileTaskCard({ onChangeStatus, onDeleteTask, onEditTask, task }: {
+function MobileTaskCard({ onChangeStatus, onDeleteTask, onEditTask, onPreviewTask, task }: {
   onChangeStatus: (id: string, s: TaskStatus) => void;
   onDeleteTask: (id: string) => void;
   onEditTask: (t: ManagedTask) => void;
+  onPreviewTask: (t: ManagedTask) => void;
   task: ManagedTask;
 }) {
   const isDone = task.status === "Terminé";
@@ -1385,7 +1426,7 @@ function MobileTaskCard({ onChangeStatus, onDeleteTask, onEditTask, task }: {
         <div className="flex items-start justify-between gap-2">
           <button
             className={`block min-w-0 flex-1 text-left text-[13px] font-semibold leading-[1.35] text-[var(--tsp-text)] ${isDone ? "line-through decoration-slate-400 decoration-2" : ""}`}
-            onClick={() => onEditTask(task)}
+            onClick={() => onPreviewTask(task)}
             type="button"
           >
             {task.title}
@@ -2592,8 +2633,151 @@ function SaveBadge({ saveState }: { saveState: SaveState }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// ── TASK EDITOR MODAL ───────────────────────────────────────────────────────
+// ── TASK PREVIEW / EDITOR ───────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
+
+function TaskPreviewPage({
+  onBack,
+  onDelete,
+  onEdit,
+  sectionName,
+  task,
+}: {
+  onBack: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  sectionName: string;
+  task: ManagedTask;
+}) {
+  const dateRange = formatTaskDateRange(task);
+
+  return (
+    <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] p-3 sm:p-5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <button
+                  className="projects-btn-secondary flex h-10 w-10 shrink-0 items-center justify-center"
+                  onClick={onBack}
+                  type="button"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <div className="min-w-0">
+                  <p className="projects-label">Tâches</p>
+                  <h2 className="mt-1 text-[14px] font-bold text-[var(--tsp-text)]">Aperçu de la tâche</h2>
+                  <p className="mt-2 text-[15px] font-semibold leading-[1.35] text-[var(--tsp-text)]">{task.title}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="projects-btn-secondary flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
+                  onClick={onEdit}
+                  type="button"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Modifier
+                </button>
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2]"
+                  onClick={onDelete}
+                  type="button"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="projects-surface p-[14px] sm:p-5">
+            <p className="projects-label mb-2">Description</p>
+            {task.note ? (
+              <p className="whitespace-pre-wrap text-[13px] leading-[1.6] text-[var(--tsp-text-secondary)]">{task.note}</p>
+            ) : (
+              <div className="projects-surface-soft px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                Aucune note sur cette tâche.
+              </div>
+            )}
+          </div>
+
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="projects-label mb-1 flex items-center gap-1.5"><Paperclip className="h-3.5 w-3.5" />Pièces jointes</p>
+                <p className="text-[12px] text-[var(--tsp-text-secondary)]">{task.attachments.length} fichier{task.attachments.length > 1 ? "s" : ""}</p>
+              </div>
+            </div>
+            {task.attachments.length ? (
+              <div className="mt-4 space-y-2">
+                {task.attachments.map((attachment) => (
+                  <a
+                    key={attachment.path}
+                    className="projects-surface-soft flex items-center gap-3 px-3 py-3 transition hover:bg-white"
+                    href={attachment.path}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
+                      {isImageAttachmentMimeType(attachment.mimeType) ? (
+                        <Image alt={attachment.name} className="object-cover" fill sizes="48px" src={attachment.path} />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[var(--tsp-text-secondary)]">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] font-semibold text-[var(--tsp-text)]">{attachment.name}</p>
+                      <p className="mt-0.5 text-[11px] text-[var(--tsp-text-secondary)]">{formatAttachmentSize(attachment.size)}</p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="projects-surface-soft mt-4 px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                Aucune pièce jointe pour cette tâche.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <p className="projects-label mb-3">Informations</p>
+            <div className="space-y-2">
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Section</span>
+                <span className="truncate text-[13px] font-semibold text-[var(--tsp-text)]">{sectionName || "Sans section"}</span>
+              </div>
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Statut</span>
+                <span className="rounded-md px-2.5 py-1 text-[11px] font-semibold" style={STATUS_BADGE_STYLE[task.status]}>
+                  {task.status}
+                </span>
+              </div>
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Priorité</span>
+                <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${PRIORITY_META[task.priority].cls}`}>
+                  {task.priority}
+                </span>
+              </div>
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Responsable</span>
+                <span className="truncate text-[13px] font-semibold text-[var(--tsp-text)]">{task.responsible || "Non assigné"}</span>
+              </div>
+              <div className="projects-surface-soft flex items-center justify-between gap-3 px-3 py-2.5">
+                <span className="text-[12px] font-medium text-[var(--tsp-text-secondary)]">Période</span>
+                <span className="text-right text-[13px] font-semibold text-[var(--tsp-text)]">{dateRange}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TaskEditorPage({ defaultProjectId, onClose, onSave, sections, task, teamMembers }: {
   defaultProjectId: string;
