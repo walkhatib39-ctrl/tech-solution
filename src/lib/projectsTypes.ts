@@ -109,7 +109,10 @@ export interface ProjectDocFile {
   folderId: string | null;
   title: string;
   contentMarkdown: string;
+  createdAt: string;
+  createdBy: string;
   updatedAt: string;
+  updatedBy: string;
 }
 
 export interface ProjectTrackingField {
@@ -172,7 +175,7 @@ export interface ProjectAccess {
 export interface ProjectActivityLog {
   id: string;
   projectId: string;
-  entityType: "task" | "intervention";
+  entityType: "task" | "intervention" | "doc";
   entityId: string;
   action:
     | "created"

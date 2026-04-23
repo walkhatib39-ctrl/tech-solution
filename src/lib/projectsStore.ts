@@ -399,7 +399,11 @@ function normalizeActivityLog(
     "unassigned",
   ]);
   const entityType =
-    log.entityType === "intervention" ? "intervention" : "task";
+    log.entityType === "intervention"
+      ? "intervention"
+      : log.entityType === "doc"
+        ? "doc"
+        : "task";
   const action = allowedActions.has(String(log.action))
     ? (String(log.action) as ProjectActivityLog["action"])
     : "updated";
@@ -505,10 +509,16 @@ function normalizeDocFile(file: Partial<ProjectDocFile>): ProjectDocFile | null 
     title: file.title.trim(),
     contentMarkdown:
       typeof file.contentMarkdown === "string" ? file.contentMarkdown : "",
+    createdAt:
+      typeof file.createdAt === "string" && file.createdAt
+        ? file.createdAt
+        : new Date().toISOString(),
+    createdBy: typeof file.createdBy === "string" ? file.createdBy.trim() : "",
     updatedAt:
       typeof file.updatedAt === "string" && file.updatedAt
         ? file.updatedAt
         : new Date().toISOString(),
+    updatedBy: typeof file.updatedBy === "string" ? file.updatedBy.trim() : "",
   };
 }
 
@@ -1288,6 +1298,175 @@ function applyInterventionAuditTrail(
   };
 }
 
+function getDocEditableChanges(current: ProjectDocFile, next: ProjectDocFile) {
+  return {
+    contentChanged: current.contentMarkdown !== next.contentMarkdown,
+    folderChanged: current.folderId !== next.folderId,
+    titleChanged: current.title !== next.title,
+  };
+}
+
+function hasRecentDocUpdateLog(
+  logs: ProjectActivityLog[],
+  actorUserId: string,
+  docId: string,
+  now: string
+) {
+  const nowTime = new Date(now).getTime();
+
+  return logs.some((log) => {
+    if (
+      log.entityType !== "doc" ||
+      log.entityId !== docId ||
+      log.actorUserId !== actorUserId ||
+      log.action !== "updated"
+    ) {
+      return false;
+    }
+
+    const occurredAt = new Date(log.occurredAt).getTime();
+    if (Number.isNaN(occurredAt)) {
+      return false;
+    }
+
+    return nowTime - occurredAt < 1000 * 60 * 20;
+  });
+}
+
+function applyDocAuditTrail(
+  currentData: ProjectsData,
+  incomingData: ProjectsData,
+  actor: CurrentProjectUser
+): ProjectsData {
+  const now = new Date().toISOString();
+  const currentDocFilesById = new Map(
+    currentData.docFiles.map((file) => [file.id, file])
+  );
+  const folderNameById = new Map(
+    incomingData.docFolders.map((folder) => [folder.id, folder.name])
+  );
+  const appendedLogs: ProjectActivityLog[] = [];
+
+  const docFiles = incomingData.docFiles.map((file) => {
+    const current = currentDocFilesById.get(file.id);
+
+    if (!current) {
+      const createdFile: ProjectDocFile = {
+        ...file,
+        createdAt: file.createdAt || now,
+        createdBy: file.createdBy || actor.name,
+        updatedAt: file.updatedAt || now,
+        updatedBy: file.updatedBy || actor.name,
+      };
+
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "created",
+          entityId: createdFile.id,
+          entityType: "doc",
+          message: `${actor.name} a créé le document "${createdFile.title}"`,
+          meta: {
+            folderId: createdFile.folderId,
+            title: createdFile.title,
+          },
+          projectId: createdFile.projectId,
+        })
+      );
+
+      return createdFile;
+    }
+
+    const { contentChanged, folderChanged, titleChanged } = getDocEditableChanges(
+      current,
+      file
+    );
+    const changed = contentChanged || folderChanged || titleChanged;
+
+    const nextFile: ProjectDocFile = {
+      ...file,
+      createdAt: current.createdAt || file.createdAt || now,
+      createdBy: current.createdBy || file.createdBy || "",
+      updatedAt: changed ? now : current.updatedAt || file.updatedAt || "",
+      updatedBy: changed ? actor.name : current.updatedBy || file.updatedBy || "",
+    };
+
+    if (folderChanged) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "updated",
+          entityId: nextFile.id,
+          entityType: "doc",
+          message: `${actor.name} a déplacé le document "${nextFile.title}" vers ${nextFile.folderId ? folderNameById.get(nextFile.folderId) || "un dossier" : "la racine"}`,
+          meta: {
+            fromFolderId: current.folderId,
+            toFolderId: nextFile.folderId,
+            title: nextFile.title,
+          },
+          projectId: nextFile.projectId,
+        })
+      );
+    }
+
+    if (
+      (contentChanged || titleChanged) &&
+      !hasRecentDocUpdateLog(
+        [...appendedLogs, ...incomingData.activityLogs],
+        actor.id,
+        nextFile.id,
+        now
+      )
+    ) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "updated",
+          entityId: nextFile.id,
+          entityType: "doc",
+          message:
+            titleChanged && !contentChanged
+              ? `${actor.name} a renommé le document "${current.title}" en "${nextFile.title}"`
+              : `${actor.name} a mis à jour le document "${nextFile.title}"`,
+          meta: {
+            previousTitle: current.title,
+            title: nextFile.title,
+          },
+          projectId: nextFile.projectId,
+        })
+      );
+    }
+
+    return nextFile;
+  });
+
+  const nextDocIds = new Set(docFiles.map((file) => file.id));
+  for (const currentFile of currentData.docFiles) {
+    if (!nextDocIds.has(currentFile.id)) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "deleted",
+          entityId: currentFile.id,
+          entityType: "doc",
+          message: `${actor.name} a supprimé le document "${currentFile.title}"`,
+          meta: {
+            title: currentFile.title,
+          },
+          projectId: currentFile.projectId,
+        })
+      );
+    }
+  }
+
+  return {
+    ...incomingData,
+    docFiles,
+    activityLogs: [...appendedLogs, ...incomingData.activityLogs]
+      .sort(
+        (a, b) =>
+          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+      )
+      .slice(0, 1000),
+  };
+}
+
 function readLegacySeed(): ProjectsData {
   if (fs.existsSync(LEGACY_PROJECTS_FILE)) {
     const parsed = JSON.parse(
@@ -1605,6 +1784,8 @@ async function ensureProjectsSchema() {
         folder_id VARCHAR(120) NULL,
         title VARCHAR(190) NOT NULL,
         content_markdown MEDIUMTEXT NULL,
+        created_by VARCHAR(190) NULL,
+        updated_by VARCHAR(190) NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_doc_files_project (project_id),
@@ -1614,6 +1795,30 @@ async function ensureProjectsSchema() {
           ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    const [docFileColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'project_doc_files'`
+    );
+    const docFileColumns = new Set(
+      docFileColumnRows.map((row) => String(row.COLUMN_NAME))
+    );
+
+    if (!docFileColumns.has("created_by")) {
+      await pool.query(`
+        ALTER TABLE project_doc_files
+          ADD COLUMN created_by VARCHAR(190) NULL AFTER content_markdown
+      `);
+    }
+
+    if (!docFileColumns.has("updated_by")) {
+      await pool.query(`
+        ALTER TABLE project_doc_files
+          ADD COLUMN updated_by VARCHAR(190) NULL AFTER created_by
+      `);
+    }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS project_tracking_fields (
@@ -2007,14 +2212,18 @@ async function saveProjectsDataWithoutSchema(
   for (const file of data.docFiles) {
     await queryable.execute(
       `INSERT INTO project_doc_files
-        (id, project_id, folder_id, title, content_markdown)
-       VALUES (?, ?, ?, ?, ?)`,
+        (id, project_id, folder_id, title, content_markdown, created_by, updated_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         file.id,
         file.projectId,
         file.folderId,
         file.title,
         file.contentMarkdown,
+        file.createdBy || null,
+        file.updatedBy || null,
+        toNullableDateTime(file.createdAt),
+        toNullableDateTime(file.updatedAt),
       ]
     );
   }
@@ -2173,7 +2382,10 @@ export async function getProjectsData(): Promise<ProjectsData> {
       folder_id AS folderId,
       title,
       content_markdown AS contentMarkdown,
-      updated_at AS updatedAt
+      created_at AS createdAt,
+      created_by AS createdBy,
+      updated_at AS updatedAt,
+      updated_by AS updatedBy
      FROM project_doc_files
      ORDER BY updated_at DESC`
   );
@@ -2327,10 +2539,16 @@ export async function getProjectsData(): Promise<ProjectsData> {
       folderId: row.folderId ? String(row.folderId) : null,
       title: String(row.title),
       contentMarkdown: String(row.contentMarkdown ?? ""),
+      createdAt:
+        typeof row.createdAt === "string"
+          ? row.createdAt
+          : new Date().toISOString(),
+      createdBy: String(row.createdBy ?? ""),
       updatedAt:
         typeof row.updatedAt === "string"
           ? row.updatedAt
           : new Date().toISOString(),
+      updatedBy: String(row.updatedBy ?? ""),
     })),
     trackingFields: fieldRows.map((row) => ({
       id: String(row.id),
@@ -2396,7 +2614,12 @@ export async function getProjectsData(): Promise<ProjectsData> {
     activityLogs: activityLogRows.map((row) => ({
       id: String(row.id),
       projectId: String(row.projectId),
-      entityType: row.entityType === "intervention" ? "intervention" : "task",
+      entityType:
+        row.entityType === "intervention"
+          ? "intervention"
+          : row.entityType === "doc"
+            ? "doc"
+            : "task",
       entityId: String(row.entityId),
       action: String(row.action) as ProjectActivityLog["action"],
       actorUserId: String(row.actorUserId),
@@ -2594,9 +2817,14 @@ export async function saveProjectsDataForUser(
       ...incomingData,
       updatedAt: new Date().toISOString(),
     }, user);
-    const auditedData = applyInterventionAuditTrail(
+    const interventionAuditedData = applyInterventionAuditTrail(
       currentData,
       auditedTaskData,
+      user
+    );
+    const auditedData = applyDocAuditTrail(
+      currentData,
+      interventionAuditedData,
       user
     );
     return saveProjectsData(auditedData);
@@ -2659,7 +2887,12 @@ export async function saveProjectsDataForUser(
     taskAuditedData,
     user
   );
+  const docAuditedData = applyDocAuditTrail(
+    currentData,
+    mergedData,
+    user
+  );
 
-  const savedData = await saveProjectsData(mergedData);
+  const savedData = await saveProjectsData(docAuditedData);
   return filterProjectsDataForUser(savedData, allowedProjectIds, false);
 }

@@ -700,11 +700,22 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const handleAddDocFile        = (pid: string, fid: string | null, title: string) => {
     if (!title.trim()) return;
     const clean = title.trim();
-    const file: ProjectDocFile = { id: createId("doc"), projectId: pid, folderId: fid, title: clean.endsWith(".md") ? clean : `${clean}.md`, contentMarkdown: `# ${clean.replace(/\.md$/i, "")}\n\n`, updatedAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const file: ProjectDocFile = {
+      id: createId("doc"),
+      projectId: pid,
+      folderId: fid,
+      title: clean.endsWith(".md") ? clean : `${clean}.md`,
+      contentMarkdown: `# ${clean.replace(/\.md$/i, "")}\n\n`,
+      createdAt: now,
+      createdBy: currentUser.name,
+      updatedAt: now,
+      updatedBy: currentUser.name,
+    };
     updateData((c) => ({ ...c, docFiles: [file, ...c.docFiles] }));
     setSelectedDocFileId(file.id);
   };
-  const handleUpdateDocFile     = (id: string, patch: Partial<ProjectDocFile>) => updateData((c) => ({ ...c, docFiles: c.docFiles.map((f) => f.id === id ? { ...f, ...patch, updatedAt: new Date().toISOString() } : f) }));
+  const handleUpdateDocFile     = (id: string, patch: Partial<ProjectDocFile>) => updateData((c) => ({ ...c, docFiles: c.docFiles.map((f) => f.id === id ? { ...f, ...patch, updatedAt: new Date().toISOString(), updatedBy: currentUser.name } : f) }));
   const handleDeleteDocFile     = (id: string) => updateData((c) => ({ ...c, docFiles: c.docFiles.filter((f) => f.id !== id) }));
   const handleAddTracking       = (pid: string, label: string) => { if (!label.trim()) return; updateData((c) => ({ ...c, trackingFields: [...c.trackingFields, { id: createId("metric"), projectId: pid, label: label.trim(), value: "", target: "", unit: "", status: "En cours" as TrackingStatus, note: "", position: trackingFields.length }] })); };
   const handleUpdateTracking    = (id: string, patch: Partial<ProjectTrackingField>) => updateData((c) => ({ ...c, trackingFields: c.trackingFields.map((f) => f.id === id ? { ...f, ...patch } : f) }));
@@ -1204,7 +1215,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                   />
                 )
               )}
-              {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
+              {activeTab === "Docs"     && <DocsTab activityLogs={projectActivityLogs} files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
               {activeTab === "Interventions" && (
                 isInterventionEditorOpen ? (
                   <InterventionEditorPage
@@ -1725,7 +1736,8 @@ function MobileTaskMeta({ className = "", danger, icon, label, value }: { classN
 // ── DOCS TAB ────────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDeleteFolder, onSelectFile, onUpdateFile, projectId, selectedFile }: {
+function DocsTab({ activityLogs, files, folders, onAddFile, onAddFolder, onDeleteFile, onDeleteFolder, onSelectFile, onUpdateFile, projectId, selectedFile }: {
+  activityLogs: ProjectActivityLog[];
   files: ProjectDocFile[]; folders: ProjectDocFolder[];
   onAddFile: (pid: string, fid: string | null, title: string) => void;
   onAddFolder: (pid: string, name: string) => void;
@@ -1765,6 +1777,17 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
     ? (selectedFile.folderId ? folders.find((f) => f.id === selectedFile.folderId) : null)
     : null;
   const activeMobilePanel = selectedFile ? mobilePanel : "browser";
+  const selectedFileActivityLogs = useMemo(
+    () =>
+      !selectedFile
+        ? []
+        : activityLogs
+            .filter((log) => log.entityType === "doc" && log.entityId === selectedFile.id)
+            .slice(0, 6),
+    [activityLogs, selectedFile]
+  );
+  const createdAtLabel = selectedFile ? formatProjectDateTime(selectedFile.createdAt) : "";
+  const updatedAtLabel = selectedFile ? formatProjectDateTime(selectedFile.updatedAt) : "";
 
   return (
     <div className="border-t border-slate-100 md:flex md:h-[calc(100vh-220px)] md:min-h-[560px]">
@@ -1994,11 +2017,34 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
               </button>
             </div>
 
+            <div className="border-b border-slate-100 bg-white px-3 py-3 md:px-5">
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedFolder ? (
+                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                    {selectedFolder.name}
+                  </span>
+                ) : null}
+                {createdAtLabel ? (
+                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                    Créé {createdAtLabel}
+                    {selectedFile.createdBy ? ` · ${selectedFile.createdBy}` : ""}
+                  </span>
+                ) : null}
+                {updatedAtLabel ? (
+                  <span className="rounded-md bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                    Mis à jour {updatedAtLabel}
+                    {selectedFile.updatedBy ? ` · ${selectedFile.updatedBy}` : ""}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
             {/* Editor body */}
-            <div className={`flex min-h-0 flex-1 flex-col ${editorMode === "split" ? "md:grid md:grid-cols-2 md:divide-x md:divide-slate-100" : ""}`}>
+            <div className="flex min-h-0 flex-1 flex-col">
               {/* Textarea */}
-              {(editorMode === "edit" || editorMode === "split") && (
-                <div className="flex min-h-0 flex-col">
+              <div className={`flex min-h-0 flex-1 flex-col ${editorMode === "split" ? "md:grid md:grid-cols-2 md:divide-x md:divide-slate-100" : ""}`}>
+                {(editorMode === "edit" || editorMode === "split") && (
+                  <div className="flex min-h-0 flex-col">
                   {editorMode === "split" && (
                     <div className="border-b border-slate-100 bg-[#f8fafc] px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
                       Markdown
@@ -2010,21 +2056,66 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                     onChange={(e) => onUpdateFile(selectedFile.id, { contentMarkdown: e.target.value })}
                     value={selectedFile.contentMarkdown}
                   />
-                </div>
-              )}
-              {/* Preview */}
-              {(editorMode === "preview" || editorMode === "split") && (
-                <div className={`${editorMode === "split" ? "hidden md:flex" : "flex"} min-h-0 flex-col overflow-hidden`}>
-                  {editorMode === "split" && (
-                    <div className="border-b border-slate-100 bg-[#f8fafc] px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      Aperçu
+                  </div>
+                )}
+                {/* Preview */}
+                {(editorMode === "preview" || editorMode === "split") && (
+                  <div className={`${editorMode === "split" ? "hidden md:flex" : "flex"} min-h-0 flex-col overflow-hidden`}>
+                    {editorMode === "split" && (
+                      <div className="border-b border-slate-100 bg-[#f8fafc] px-5 py-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        Aperçu
+                      </div>
+                    )}
+                    <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                      <MarkdownPreview content={selectedFile.contentMarkdown} />
                     </div>
-                  )}
-                  <div className="flex-1 overflow-y-auto p-4 md:p-6">
-                    <MarkdownPreview content={selectedFile.contentMarkdown} />
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-slate-100 bg-[#f8fafc] px-3 py-3 md:px-5">
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                      Résumé
+                    </p>
+                    <p className="mt-2 text-[12px] leading-[1.65] text-slate-600">
+                      {createdAtLabel
+                        ? `Ce document a été créé le ${createdAtLabel}${selectedFile.createdBy ? ` par ${selectedFile.createdBy}` : ""}.`
+                        : "Ce document existe déjà dans l’espace projet."}{" "}
+                      {updatedAtLabel
+                        ? `Sa dernière mise à jour date du ${updatedAtLabel}${selectedFile.updatedBy ? ` par ${selectedFile.updatedBy}` : ""}.`
+                        : ""}{" "}
+                      {selectedFolder
+                        ? `Il est actuellement classé dans le dossier ${selectedFolder.name}.`
+                        : "Il est actuellement classé à la racine."}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        Activité récente
+                      </p>
+                      {selectedFileActivityLogs.length ? (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                          {selectedFileActivityLogs.length}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {selectedFileActivityLogs.length ? (
+                        selectedFileActivityLogs.map((log) => (
+                          <ActivityLogItem key={log.id} log={log} />
+                        ))
+                      ) : (
+                        <p className="text-[12px] text-slate-400">
+                          Aucune activité enregistrée pour ce document.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </>
         ) : (
