@@ -398,7 +398,8 @@ function normalizeActivityLog(
     "assigned",
     "unassigned",
   ]);
-  const entityType = log.entityType === "task" ? "task" : "task";
+  const entityType =
+    log.entityType === "intervention" ? "intervention" : "task";
   const action = allowedActions.has(String(log.action))
     ? (String(log.action) as ProjectActivityLog["action"])
     : "updated";
@@ -629,6 +630,14 @@ function normalizeIntervention(
           .map((path) => path.trim())
       : [],
     note: typeof intervention.note === "string" ? intervention.note.trim() : "",
+    createdAt: typeof intervention.createdAt === "string" ? intervention.createdAt : "",
+    createdBy: typeof intervention.createdBy === "string" ? intervention.createdBy.trim() : "",
+    updatedAt: typeof intervention.updatedAt === "string" ? intervention.updatedAt : "",
+    updatedBy: typeof intervention.updatedBy === "string" ? intervention.updatedBy.trim() : "",
+    statusChangedAt:
+      typeof intervention.statusChangedAt === "string" ? intervention.statusChangedAt : "",
+    statusChangedBy:
+      typeof intervention.statusChangedBy === "string" ? intervention.statusChangedBy.trim() : "",
   };
 }
 
@@ -1085,7 +1094,192 @@ function applyTaskAuditTrail(
   return {
     ...incomingData,
     tasks,
-    activityLogs: [...appendedLogs, ...currentData.activityLogs]
+    activityLogs: [...appendedLogs, ...incomingData.activityLogs]
+      .sort(
+        (a, b) =>
+          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+      )
+      .slice(0, 1000),
+  };
+}
+
+function arePhotoPathsEqual(a: string[], b: string[]) {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((path, index) => path === b[index]);
+}
+
+function getInterventionEditableChanges(
+  current: ProjectIntervention,
+  next: ProjectIntervention
+) {
+  return {
+    contentChanged:
+      current.interventionDate !== next.interventionDate ||
+      current.interventionTime !== next.interventionTime ||
+      current.department !== next.department ||
+      current.address !== next.address ||
+      current.city !== next.city ||
+      current.prestation !== next.prestation ||
+      current.price !== next.price ||
+      current.reportDate !== next.reportDate ||
+      current.cancellationReason !== next.cancellationReason ||
+      current.note !== next.note ||
+      !arePhotoPathsEqual(current.photoPaths, next.photoPaths),
+    statusChanged: current.status !== next.status,
+  };
+}
+
+function buildInterventionStatusChangedMessage(
+  actorName: string,
+  intervention: ProjectIntervention
+) {
+  switch (intervention.status) {
+    case "Réalisée":
+      return `${actorName} a marqué l’intervention "${intervention.prestation}" comme réalisée`;
+    case "Reportée":
+      return `${actorName} a reporté l’intervention "${intervention.prestation}" au ${intervention.reportDate || intervention.interventionDate || "planning à définir"}`;
+    case "Annulée":
+      return `${actorName} a annulé l’intervention "${intervention.prestation}"`;
+    default:
+      return `${actorName} a remis l’intervention "${intervention.prestation}" en prévue`;
+  }
+}
+
+function applyInterventionAuditTrail(
+  currentData: ProjectsData,
+  incomingData: ProjectsData,
+  actor: CurrentProjectUser
+): ProjectsData {
+  const now = new Date().toISOString();
+  const currentInterventionsById = new Map(
+    currentData.interventions.map((intervention) => [intervention.id, intervention])
+  );
+  const appendedLogs: ProjectActivityLog[] = [];
+
+  const interventions = incomingData.interventions.map((intervention) => {
+    const current = currentInterventionsById.get(intervention.id);
+
+    if (!current) {
+      const createdIntervention: ProjectIntervention = {
+        ...intervention,
+        createdAt: now,
+        createdBy: actor.name,
+        updatedAt: now,
+        updatedBy: actor.name,
+        statusChangedAt: now,
+        statusChangedBy: actor.name,
+      };
+
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "created",
+          entityId: createdIntervention.id,
+          entityType: "intervention",
+          message: `${actor.name} a créé l’intervention "${createdIntervention.prestation}"`,
+          meta: {
+            status: createdIntervention.status,
+            scheduledFor: createdIntervention.interventionDate,
+          },
+          projectId: createdIntervention.projectId,
+        })
+      );
+
+      return createdIntervention;
+    }
+
+    const { contentChanged, statusChanged } = getInterventionEditableChanges(
+      current,
+      intervention
+    );
+    const changed = contentChanged || statusChanged;
+
+    const nextIntervention: ProjectIntervention = {
+      ...intervention,
+      createdAt: current.createdAt || intervention.createdAt || "",
+      createdBy: current.createdBy || intervention.createdBy || "",
+      updatedAt: changed ? now : current.updatedAt || intervention.updatedAt || "",
+      updatedBy: changed ? actor.name : current.updatedBy || intervention.updatedBy || "",
+      statusChangedAt: statusChanged
+        ? now
+        : current.statusChangedAt || intervention.statusChangedAt || "",
+      statusChangedBy: statusChanged
+        ? actor.name
+        : current.statusChangedBy || intervention.statusChangedBy || "",
+    };
+
+    if (statusChanged) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "status_changed",
+          entityId: nextIntervention.id,
+          entityType: "intervention",
+          message: buildInterventionStatusChangedMessage(actor.name, nextIntervention),
+          meta: {
+            from: current.status,
+            to: nextIntervention.status,
+            reportDate: nextIntervention.reportDate,
+            cancellationReason: nextIntervention.cancellationReason,
+          },
+          projectId: nextIntervention.projectId,
+        })
+      );
+    }
+
+    if (contentChanged) {
+      const photosDelta =
+        nextIntervention.photoPaths.length - current.photoPaths.length;
+      const message =
+        photosDelta > 0
+          ? `${actor.name} a ajouté ${photosDelta} photo${photosDelta > 1 ? "s" : ""} à l’intervention "${nextIntervention.prestation}"`
+          : `${actor.name} a mis à jour l’intervention "${nextIntervention.prestation}"`;
+
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "updated",
+          entityId: nextIntervention.id,
+          entityType: "intervention",
+          message,
+          meta: {
+            previousStatus: current.status,
+            status: nextIntervention.status,
+            photoCount: nextIntervention.photoPaths.length,
+          },
+          projectId: nextIntervention.projectId,
+        })
+      );
+    }
+
+    return nextIntervention;
+  });
+
+  const nextInterventionIds = new Set(
+    interventions.map((intervention) => intervention.id)
+  );
+
+  for (const currentIntervention of currentData.interventions) {
+    if (!nextInterventionIds.has(currentIntervention.id)) {
+      appendedLogs.push(
+        buildTaskActivityLog(actor, now, {
+          action: "deleted",
+          entityId: currentIntervention.id,
+          entityType: "intervention",
+          message: `${actor.name} a supprimé l’intervention "${currentIntervention.prestation}"`,
+          meta: {
+            prestation: currentIntervention.prestation,
+          },
+          projectId: currentIntervention.projectId,
+        })
+      );
+    }
+  }
+
+  return {
+    ...incomingData,
+    interventions,
+    activityLogs: [...appendedLogs, ...incomingData.activityLogs]
       .sort(
         (a, b) =>
           new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
@@ -1473,6 +1667,12 @@ async function ensureProjectsSchema() {
         cancellation_reason TEXT NULL,
         photo_paths_json LONGTEXT NULL,
         note TEXT NULL,
+        created_on DATETIME NULL,
+        created_by VARCHAR(190) NULL,
+        updated_on DATETIME NULL,
+        updated_by VARCHAR(190) NULL,
+        status_changed_on DATETIME NULL,
+        status_changed_by VARCHAR(190) NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_project_interventions_project (project_id),
@@ -1540,6 +1740,63 @@ async function ensureProjectsSchema() {
       await pool.query(`
         ALTER TABLE project_interventions
           ADD COLUMN photo_paths_json LONGTEXT NULL AFTER cancellation_reason
+      `);
+    }
+
+    if (!interventionColumns.has("created_on")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN created_on DATETIME NULL AFTER note
+      `);
+      await pool.query(`
+        UPDATE project_interventions
+        SET created_on = created_at
+        WHERE created_on IS NULL
+      `);
+    }
+
+    if (!interventionColumns.has("created_by")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN created_by VARCHAR(190) NULL AFTER created_on
+      `);
+    }
+
+    if (!interventionColumns.has("updated_on")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN updated_on DATETIME NULL AFTER created_by
+      `);
+      await pool.query(`
+        UPDATE project_interventions
+        SET updated_on = COALESCE(created_on, created_at)
+        WHERE updated_on IS NULL
+      `);
+    }
+
+    if (!interventionColumns.has("updated_by")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN updated_by VARCHAR(190) NULL AFTER updated_on
+      `);
+    }
+
+    if (!interventionColumns.has("status_changed_on")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN status_changed_on DATETIME NULL AFTER updated_by
+      `);
+      await pool.query(`
+        UPDATE project_interventions
+        SET status_changed_on = COALESCE(updated_on, created_on, created_at)
+        WHERE status_changed_on IS NULL
+      `);
+    }
+
+    if (!interventionColumns.has("status_changed_by")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN status_changed_by VARCHAR(190) NULL AFTER status_changed_on
       `);
     }
 
@@ -1798,8 +2055,8 @@ async function saveProjectsDataWithoutSchema(
   for (const intervention of data.interventions) {
     await queryable.execute(
       `INSERT INTO project_interventions
-        (id, project_id, intervention_date, intervention_time, department, address, city, prestation, price, status, report_date, cancellation_reason, photo_paths_json, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, intervention_date, intervention_time, department, address, city, prestation, price, status, report_date, cancellation_reason, photo_paths_json, note, created_on, created_by, updated_on, updated_by, status_changed_on, status_changed_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         intervention.id,
         intervention.projectId,
@@ -1815,6 +2072,12 @@ async function saveProjectsDataWithoutSchema(
         intervention.cancellationReason,
         JSON.stringify(intervention.photoPaths),
         intervention.note,
+        toNullableDateTime(intervention.createdAt),
+        intervention.createdBy || null,
+        toNullableDateTime(intervention.updatedAt),
+        intervention.updatedBy || null,
+        toNullableDateTime(intervention.statusChangedAt),
+        intervention.statusChangedBy || null,
       ]
     );
   }
@@ -1953,7 +2216,13 @@ export async function getProjectsData(): Promise<ProjectsData> {
       report_date AS reportDate,
       cancellation_reason AS cancellationReason,
       photo_paths_json AS photoPathsJson,
-      note
+      note,
+      created_on AS createdAt,
+      created_by AS createdBy,
+      updated_on AS updatedAt,
+      updated_by AS updatedBy,
+      status_changed_on AS statusChangedAt,
+      status_changed_by AS statusChangedBy
      FROM project_interventions
      ORDER BY intervention_date DESC, created_at DESC`
   );
@@ -2105,6 +2374,13 @@ export async function getProjectsData(): Promise<ProjectsData> {
         }
       })(),
       note: String(row.note ?? ""),
+      createdAt: typeof row.createdAt === "string" ? String(row.createdAt) : "",
+      createdBy: String(row.createdBy ?? ""),
+      updatedAt: typeof row.updatedAt === "string" ? String(row.updatedAt) : "",
+      updatedBy: String(row.updatedBy ?? ""),
+      statusChangedAt:
+        typeof row.statusChangedAt === "string" ? String(row.statusChangedAt) : "",
+      statusChangedBy: String(row.statusChangedBy ?? ""),
     })),
     teamUsers: userRows.map((row) => ({
       id: String(row.id),
@@ -2120,7 +2396,7 @@ export async function getProjectsData(): Promise<ProjectsData> {
     activityLogs: activityLogRows.map((row) => ({
       id: String(row.id),
       projectId: String(row.projectId),
-      entityType: row.entityType === "task" ? "task" : "task",
+      entityType: row.entityType === "intervention" ? "intervention" : "task",
       entityId: String(row.entityId),
       action: String(row.action) as ProjectActivityLog["action"],
       actorUserId: String(row.actorUserId),
@@ -2314,10 +2590,15 @@ export async function saveProjectsDataForUser(
   });
 
   if (user.role === "super_admin") {
-    const auditedData = applyTaskAuditTrail(currentData, {
+    const auditedTaskData = applyTaskAuditTrail(currentData, {
       ...incomingData,
       updatedAt: new Date().toISOString(),
     }, user);
+    const auditedData = applyInterventionAuditTrail(
+      currentData,
+      auditedTaskData,
+      user
+    );
     return saveProjectsData(auditedData);
   }
 
@@ -2326,7 +2607,7 @@ export async function saveProjectsDataForUser(
   const incomingProjectsById = new Map(
     incomingData.projects.map((project) => [project.id, project])
   );
-  const mergedData = applyTaskAuditTrail(currentData, {
+  const taskAuditedData = applyTaskAuditTrail(currentData, {
     ...currentData,
     projects: currentData.projects.map((project) =>
       allowedProjectIds.has(project.id) && incomingProjectsById.has(project.id)
@@ -2373,6 +2654,11 @@ export async function saveProjectsDataForUser(
     activityLogs: currentData.activityLogs,
     updatedAt: new Date().toISOString(),
   }, user);
+  const mergedData = applyInterventionAuditTrail(
+    currentData,
+    taskAuditedData,
+    user
+  );
 
   const savedData = await saveProjectsData(mergedData);
   return filterProjectsDataForUser(savedData, allowedProjectIds, false);

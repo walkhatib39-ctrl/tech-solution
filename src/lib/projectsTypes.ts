@@ -147,6 +147,12 @@ export interface ProjectIntervention {
   cancellationReason: string;
   photoPaths: string[];
   note: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  statusChangedAt: string;
+  statusChangedBy: string;
 }
 
 export interface ProjectTeamUser {
@@ -166,7 +172,7 @@ export interface ProjectAccess {
 export interface ProjectActivityLog {
   id: string;
   projectId: string;
-  entityType: "task";
+  entityType: "task" | "intervention";
   entityId: string;
   action:
     | "created"

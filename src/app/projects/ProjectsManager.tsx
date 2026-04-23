@@ -180,6 +180,12 @@ function buildBlankIntervention(projectId: string): Omit<ProjectIntervention, "i
     cancellationReason: "",
     photoPaths: [],
     note: "",
+    createdAt: "",
+    createdBy: "",
+    updatedAt: "",
+    updatedBy: "",
+    statusChangedAt: "",
+    statusChangedBy: "",
   };
 }
 
@@ -387,6 +393,9 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const [isTaskEditorOpen, setIsTaskEditorOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ManagedTask | null>(null);
   const [previewTaskId, setPreviewTaskId] = useState("");
+  const [isInterventionEditorOpen, setIsInterventionEditorOpen] = useState(false);
+  const [editingIntervention, setEditingIntervention] = useState<ProjectIntervention | null>(null);
+  const [previewInterventionId, setPreviewInterventionId] = useState("");
   const [showAddProject, setShowAddProject] = useState(false);
   const [projectForm, setProjectForm] = useState<ProjectFormState>({ name: "", color: "#1e3a5f" });
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -479,13 +488,20 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
             .sort(
               (a, b) =>
                 new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
-            )
-            .slice(0, 8),
+            ),
     [data.activityLogs, selectedProject]
+  );
+  const recentProjectActivityLogs = useMemo(
+    () => projectActivityLogs.slice(0, 8),
+    [projectActivityLogs]
   );
   const previewTask = useMemo(
     () => projectTasks.find((task) => task.id === previewTaskId) ?? null,
     [previewTaskId, projectTasks]
+  );
+  const previewIntervention = useMemo(
+    () => projectInterventions.find((intervention) => intervention.id === previewInterventionId) ?? null,
+    [previewInterventionId, projectInterventions]
   );
   const projectMemberNames = useMemo(() => {
     if (!selectedProject) return [];
@@ -505,6 +521,9 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
   }, [currentUser, data.projectAccess, data.teamUsers, selectedProject]);
+  const shouldHideProjectStats =
+    (activeTab === "Tâches" && (isTaskEditorOpen || previewTask !== null)) ||
+    (activeTab === "Interventions" && (isInterventionEditorOpen || previewIntervention !== null));
 
   const responsibleOptions = useMemo(() =>
     Array.from(new Set(projectTasks.map((t) => t.responsible.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -542,6 +561,12 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     if (!projectFiles.some((f) => f.id === selectedDocFileId))
       setSelectedDocFileId(projectFiles[0]?.id ?? "");
   }, [selectedDocFileId, projectFiles]);
+
+  useEffect(() => {
+    setIsInterventionEditorOpen(false);
+    setEditingIntervention(null);
+    setPreviewInterventionId("");
+  }, [selectedProjectId]);
 
   const stats = useMemo(() => {
     const total = projectTasks.length;
@@ -688,27 +713,63 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const handleDeleteUpdate      = (id: string) => updateData((c) => ({ ...c, updates: c.updates.filter((u) => u.id !== id) }));
   const handleAddIntervention   = (intervention: Omit<ProjectIntervention, "id">) => {
     const clean = sanitizeInterventionDraft(intervention);
-    if (!clean.prestation) return;
+    if (!clean.prestation) return "";
+    const now = new Date().toISOString();
+    const id = createId("intervention");
     updateData((c) => ({
       ...c,
       interventions: [
-        { ...clean, id: createId("intervention") },
+        {
+          ...clean,
+          id,
+          createdAt: now,
+          createdBy: currentUser.name,
+          updatedAt: now,
+          updatedBy: currentUser.name,
+          statusChangedAt: now,
+          statusChangedBy: currentUser.name,
+        },
         ...c.interventions,
       ],
     }));
+    return id;
   };
-  const handleUpdateIntervention = (id: string, patch: Partial<ProjectIntervention>) => updateData((c) => ({
-    ...c,
-    interventions: c.interventions.map((intervention) =>
-      intervention.id === id
-        ? { ...sanitizeInterventionDraft({ ...intervention, ...patch }), id }
-        : intervention
-    ),
-  }));
-  const handleDeleteIntervention = (id: string) => updateData((c) => ({
-    ...c,
-    interventions: c.interventions.filter((intervention) => intervention.id !== id),
-  }));
+  const handleUpdateIntervention = (id: string, patch: Partial<ProjectIntervention>) => {
+    const now = new Date().toISOString();
+    updateData((c) => ({
+      ...c,
+      interventions: c.interventions.map((intervention) => {
+        if (intervention.id !== id) {
+          return intervention;
+        }
+
+        const next = sanitizeInterventionDraft({ ...intervention, ...patch });
+        const statusChanged = next.status !== intervention.status;
+        return {
+          ...next,
+          id,
+          createdAt: intervention.createdAt,
+          createdBy: intervention.createdBy,
+          updatedAt: now,
+          updatedBy: currentUser.name,
+          statusChangedAt: statusChanged ? now : intervention.statusChangedAt,
+          statusChangedBy: statusChanged ? currentUser.name : intervention.statusChangedBy,
+        };
+      }),
+    }));
+    return id;
+  };
+  const handleDeleteIntervention = (id: string) => {
+    if (previewInterventionId === id) setPreviewInterventionId("");
+    if (editingIntervention?.id === id) {
+      setEditingIntervention(null);
+      setIsInterventionEditorOpen(false);
+    }
+    updateData((c) => ({
+      ...c,
+      interventions: c.interventions.filter((intervention) => intervention.id !== id),
+    }));
+  };
   const handleAddTeamUser       = (user: Omit<ProjectTeamUser, "id" | "role" | "isActive">) => {
     if (!isSuperAdmin || !user.name.trim() || !user.email.trim()) return;
     updateData((c) => ({
@@ -1018,7 +1079,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                     </div>
                   </div>
                   {/* Stats row */}
-                  {!(activeTab === "Tâches" && (isTaskEditorOpen || previewTask)) && (
+                  {!shouldHideProjectStats && (
                     <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-3 lg:justify-end">
                       <StatPill label="Total"     value={stats.total}   color="slate"   icon={<Columns3    className="h-3.5 w-3.5" />} />
                       <StatPill label="Terminées" value={stats.done}    color="emerald" icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
@@ -1109,7 +1170,7 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
               )}
 
               {/* ── Tab content ── */}
-              {activeTab === "Pilotage" && <PilotageTab activityLogs={projectActivityLogs} nextActionTasks={nextActionTasks} blockedTasks={blockedTasks} project={selectedProject} stats={stats} />}
+              {activeTab === "Pilotage" && <PilotageTab activityLogs={recentProjectActivityLogs} nextActionTasks={nextActionTasks} blockedTasks={blockedTasks} project={selectedProject} stats={stats} />}
               {activeTab === "Tâches"   && (
                 isTaskEditorOpen ? (
                   <TaskEditorPage
@@ -1144,7 +1205,53 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 )
               )}
               {activeTab === "Docs"     && <DocsTab files={projectFiles} folders={projectFolders} onAddFile={handleAddDocFile} onAddFolder={handleAddDocFolder} onDeleteFile={handleDeleteDocFile} onDeleteFolder={handleDeleteDocFolder} onSelectFile={setSelectedDocFileId} onUpdateFile={handleUpdateDocFile} projectId={selectedProject.id} selectedFile={selectedDocFile} />}
-              {activeTab === "Interventions" && <InterventionsTab key={selectedProject.id} interventions={projectInterventions} onAdd={handleAddIntervention} onDelete={handleDeleteIntervention} onUpdate={handleUpdateIntervention} projectId={selectedProject.id} />}
+              {activeTab === "Interventions" && (
+                isInterventionEditorOpen ? (
+                  <InterventionEditorPage
+                    defaultProjectId={selectedProject.id}
+                    intervention={editingIntervention}
+                    onClose={() => {
+                      setEditingIntervention(null);
+                      setIsInterventionEditorOpen(false);
+                    }}
+                    onSave={(draft, interventionId) => {
+                      const savedId = interventionId
+                        ? handleUpdateIntervention(interventionId, draft)
+                        : handleAddIntervention(draft);
+                      if (!savedId) return;
+                      setEditingIntervention(null);
+                      setIsInterventionEditorOpen(false);
+                      setPreviewInterventionId(savedId);
+                    }}
+                  />
+                ) : previewIntervention ? (
+                  <InterventionPreviewPage
+                    activityLogs={projectActivityLogs}
+                    intervention={previewIntervention}
+                    onBack={() => setPreviewInterventionId("")}
+                    onDelete={() => handleDeleteIntervention(previewIntervention.id)}
+                    onEdit={() => {
+                      setEditingIntervention(previewIntervention);
+                      setPreviewInterventionId("");
+                      setIsInterventionEditorOpen(true);
+                    }}
+                  />
+                ) : (
+                  <InterventionsTab
+                    interventions={projectInterventions}
+                    onCreate={() => {
+                      setEditingIntervention(null);
+                      setIsInterventionEditorOpen(true);
+                    }}
+                    onDelete={handleDeleteIntervention}
+                    onEdit={(intervention) => {
+                      setEditingIntervention(intervention);
+                      setIsInterventionEditorOpen(true);
+                    }}
+                    onPreview={(intervention) => setPreviewInterventionId(intervention.id)}
+                  />
+                )
+              )}
               {activeTab === "Suivi"    && <SuiviTab fields={trackingFields} updates={projectUpdates} project={selectedProject} onAddField={handleAddTracking} onUpdateField={handleUpdateTracking} onDeleteField={handleDeleteTracking} onAddUpdate={handleAddUpdate} onDeleteUpdate={handleDeleteUpdate} />}
             </div>
           ) : (
@@ -1993,277 +2100,362 @@ function MarkdownPreview({ content }: { content: string }) {
 // ── INTERVENTIONS TAB ───────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 
-function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId }: {
+function InterventionsTab({
+  interventions,
+  onCreate,
+  onDelete,
+  onEdit,
+  onPreview,
+}: {
   interventions: ProjectIntervention[];
-  onAdd: (intervention: InterventionDraft) => void;
+  onCreate: () => void;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, patch: Partial<ProjectIntervention>) => void;
-  projectId: string;
+  onEdit: (intervention: ProjectIntervention) => void;
+  onPreview: (intervention: ProjectIntervention) => void;
 }) {
-  const [draft, setDraft] = useState<InterventionDraft>(() => buildBlankIntervention(projectId));
   const [departmentFilter, setDepartmentFilter] = useState("Tous");
   const [statusFilter, setStatusFilter] = useState<InterventionStatus | "Tous">("Tous");
   const [monthFilter, setMonthFilter] = useState("Tous");
-  const [formError, setFormError] = useState("");
-  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
-  const [editingIntervention, setEditingIntervention] = useState<ProjectIntervention | null>(null);
 
-  const departmentOptions = useMemo(() =>
-    Array.from(new Set(interventions.map((intervention) => intervention.department.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+  const departmentOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          interventions
+            .map((intervention) => intervention.department.trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b)),
     [interventions]
   );
 
-  const monthOptions = useMemo(() =>
-    Array.from(new Set(interventions.map((intervention) => intervention.interventionDate.slice(0, 7)).filter(Boolean))).sort().reverse(),
-    [interventions]
-  );
-
-  const filteredInterventions = useMemo(() =>
-    interventions
-      .filter((intervention) =>
-        (departmentFilter === "Tous" || intervention.department === departmentFilter) &&
-        (statusFilter === "Tous" || intervention.status === statusFilter) &&
-        (monthFilter === "Tous" || intervention.interventionDate.startsWith(monthFilter))
+  const monthOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          interventions
+            .map((intervention) => intervention.interventionDate.slice(0, 7))
+            .filter(Boolean)
+        )
       )
-      .sort((a, b) => (b.interventionDate || "").localeCompare(a.interventionDate || "")),
+        .sort()
+        .reverse(),
+    [interventions]
+  );
+
+  const filteredInterventions = useMemo(
+    () =>
+      interventions
+        .filter(
+          (intervention) =>
+            (departmentFilter === "Tous" ||
+              intervention.department === departmentFilter) &&
+            (statusFilter === "Tous" || intervention.status === statusFilter) &&
+            (monthFilter === "Tous" ||
+              intervention.interventionDate.startsWith(monthFilter))
+        )
+        .sort((a, b) => {
+          const aKey = `${a.interventionDate}T${a.interventionTime || "00:00"}`;
+          const bKey = `${b.interventionDate}T${b.interventionTime || "00:00"}`;
+          return bKey.localeCompare(aKey);
+        }),
     [departmentFilter, interventions, monthFilter, statusFilter]
   );
 
   const stats = useMemo(() => {
-    const billable = interventions.filter((intervention) => intervention.status === "Réalisée");
+    const doneInterventions = interventions.filter(
+      (intervention) => intervention.status === "Réalisée"
+    );
+
     return {
+      cancelled: interventions.filter(
+        (intervention) => intervention.status === "Annulée"
+      ).length,
+      done: doneInterventions.length,
+      postponed: interventions.filter(
+        (intervention) => intervention.status === "Reportée"
+      ).length,
+      revenue: doneInterventions.reduce(
+        (sum, intervention) => sum + intervention.price,
+        0
+      ),
       total: interventions.length,
-      revenue: billable.reduce((sum, intervention) => sum + intervention.price, 0),
-      done: interventions.filter((intervention) => intervention.status === "Réalisée").length,
-      postponed: interventions.filter((intervention) => intervention.status === "Reportée").length,
-      cancelled: interventions.filter((intervention) => intervention.status === "Annulée").length,
     };
   }, [interventions]);
 
-  const uploadPhotos = useCallback(async (files: FileList | File[]) => {
-    const nextFiles = Array.from(files).filter((file) => file.size > 0);
-    if (!nextFiles.length) return [];
+  return (
+    <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] p-3 sm:p-5">
+      <div className="space-y-4">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <InterventionStat label="Total" value={String(stats.total)} />
+            <InterventionStat label="CA réalisé" value={formatCurrency(stats.revenue)} />
+            <InterventionStat
+              label="Réalisées"
+              value={String(stats.done)}
+              tone="green"
+            />
+            <InterventionStat
+              danger={stats.postponed > 0 || stats.cancelled > 0}
+              label="À surveiller"
+              value={String(stats.postponed + stats.cancelled)}
+              tone={stats.cancelled > 0 ? "red" : "amber"}
+            />
+          </div>
 
-    setIsUploadingPhotos(true);
-    try {
-      const formData = new FormData();
-      formData.append("projectId", projectId);
-      nextFiles.forEach((file) => formData.append("files", file));
+          <div className="projects-surface flex flex-col justify-between gap-3 p-[14px] sm:p-5">
+            <div>
+              <p className="projects-label mb-1">Interventions</p>
+              <p className="text-[14px] font-semibold text-[var(--tsp-text)]">
+                Planning, exécution et preuves terrain.
+              </p>
+              <p className="mt-1 text-[12px] leading-[1.6] text-[var(--tsp-text-secondary)]">
+                Créez une intervention, suivez son statut et ouvrez sa fiche dédiée
+                pour les photos, les reports et l’historique.
+              </p>
+            </div>
+            <button
+              className="projects-btn-primary flex h-11 items-center justify-center gap-2 text-[13px] font-semibold"
+              onClick={onCreate}
+              type="button"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nouvelle intervention
+            </button>
+          </div>
+        </div>
 
-      const response = await fetch("/api/projects/interventions/upload", {
-        body: formData,
-        method: "POST",
-      });
+        <div className="projects-surface flex flex-col gap-2 p-[14px] sm:flex-row sm:flex-wrap sm:items-center sm:p-3">
+          <label className="projects-surface-soft flex h-10 items-center gap-2 px-3 text-[12px] text-[var(--tsp-text-secondary)]">
+            <Filter className="h-3.5 w-3.5" />
+            <select
+              className="min-w-0 bg-transparent outline-none"
+              onChange={(e) =>
+                setStatusFilter(e.target.value as InterventionStatus | "Tous")
+              }
+              value={statusFilter}
+            >
+              <option value="Tous">Tous statuts</option>
+              {INTERVENTION_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="projects-surface-soft flex h-10 items-center gap-2 px-3 text-[12px] text-[var(--tsp-text-secondary)]">
+            <Calendar className="h-3.5 w-3.5" />
+            <select
+              className="min-w-0 bg-transparent outline-none"
+              onChange={(e) => setMonthFilter(e.target.value)}
+              value={monthFilter}
+            >
+              <option value="Tous">Tous les mois</option>
+              {monthOptions.map((month) => (
+                <option key={month} value={month}>
+                  {month}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="projects-surface-soft flex h-10 items-center gap-2 px-3 text-[12px] text-[var(--tsp-text-secondary)]">
+            <FolderKanban className="h-3.5 w-3.5" />
+            <select
+              className="min-w-0 bg-transparent outline-none"
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              value={departmentFilter}
+            >
+              <option value="Tous">Tous départements</option>
+              {departmentOptions.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
-      const payload = (await response.json()) as { error?: string; paths?: string[] };
-      if (!response.ok || !payload.paths) {
-        throw new Error(payload.error || "Impossible d’envoyer les photos.");
-      }
+        {filteredInterventions.length ? (
+          <>
+            <div className="projects-surface hidden overflow-hidden md:block">
+              <div className="overflow-x-auto">
+                <div className="min-w-[1120px]">
+                  <div className="grid grid-cols-[170px_1.1fr_1.2fr_110px_130px_1.5fr_110px] px-5 py-3">
+                    {[
+                      "Planning",
+                      "Lieu",
+                      "Prestation",
+                      "Prix",
+                      "Statut",
+                      "Suivi",
+                      "",
+                    ].map((header) => (
+                      <div
+                        key={header}
+                        className="projects-label text-[11px]"
+                      >
+                        {header}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="divide-y divide-[var(--tsp-border)]">
+                    {filteredInterventions.map((intervention) => (
+                      <InterventionTableRow
+                        key={intervention.id}
+                        intervention={intervention}
+                        onDelete={onDelete}
+                        onEdit={onEdit}
+                        onPreview={onPreview}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
 
-      return payload.paths;
-    } finally {
-      setIsUploadingPhotos(false);
-    }
-  }, [projectId]);
+            <div className="space-y-3 md:hidden">
+              {filteredInterventions.map((intervention) => (
+                <InterventionMobileCard
+                  key={intervention.id}
+                  intervention={intervention}
+                  onDelete={onDelete}
+                  onEdit={onEdit}
+                  onPreview={onPreview}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <EmptyState label="Aucune intervention pour ces filtres." small />
+        )}
+      </div>
+    </div>
+  );
+}
 
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const cleanDraft = sanitizeInterventionDraft(draft);
-    const error = validateInterventionDraft(cleanDraft);
-    if (error) {
-      setFormError(error);
-      return;
-    }
-    setFormError("");
-    onAdd({ ...cleanDraft, projectId });
-    setDraft(buildBlankIntervention(projectId));
+function InterventionStat({
+  danger,
+  label,
+  tone = "slate",
+  value,
+}: {
+  danger?: boolean;
+  label: string;
+  tone?: "amber" | "green" | "red" | "slate";
+  value: string;
+}) {
+  const tones = {
+    amber: "text-[#d97706]",
+    green: "text-[#16a34a]",
+    red: "text-[#dc2626]",
+    slate: "text-[var(--tsp-text)]",
   };
 
   return (
-    <div className="space-y-4 border-t border-slate-100 bg-slate-50/50 p-2.5 sm:p-5">
-      <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-3">
-        <InterventionStat label="Total" value={String(stats.total)} />
-        <InterventionStat label="CA" value={formatCurrency(stats.revenue)} />
-        <InterventionStat label="Réalisées" value={String(stats.done)} />
-        <InterventionStat label="Reportées" value={String(stats.postponed)} danger={stats.postponed > 0} />
-      </div>
-
-      <form onSubmit={submit} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm sm:p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-slate-800">Nouvelle intervention</p>
-            <p className="text-xs text-slate-400">Date, lieu, prestation, statut et justificatifs.</p>
-          </div>
-          <button type="submit" className="projects-btn-primary hidden h-9 items-center gap-1.5 px-4 text-sm font-semibold sm:flex" disabled={isUploadingPhotos}>
-            <Plus className="h-3.5 w-3.5" /> Ajouter
-          </button>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-[150px_110px_110px_1.2fr_0.9fr_1.2fr_120px_150px]">
-          <input type="date" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, interventionDate: e.target.value }))} value={draft.interventionDate} />
-          <input type="time" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, interventionTime: e.target.value }))} value={draft.interventionTime} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Département" value={draft.department} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, address: e.target.value }))} placeholder="Adresse" value={draft.address} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, city: e.target.value }))} placeholder="Ville" value={draft.city} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, prestation: e.target.value }))} placeholder="Prestation" value={draft.prestation} />
-          <input type="number" min="0" step="0.01" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, price: parsePrice(e.target.value) }))} placeholder="Prix" value={draft.price || ""} />
-          <select className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((current) => applyInterventionStatus(current, e.target.value as InterventionStatus))} value={draft.status}>
-            {INTERVENTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-          </select>
-        </div>
-        {draft.status === "Reportée" && (
-          <div className="mt-2 grid gap-2 sm:grid-cols-[180px_1fr]">
-            <input type="date" className="h-10 rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm text-amber-800 outline-none focus:border-amber-400" onChange={(e) => setDraft((c) => ({ ...c, reportDate: e.target.value }))} value={draft.reportDate} />
-            <div className="flex items-center rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs text-amber-700">
-              Nouvelle date obligatoire pour une intervention reportée.
-            </div>
-          </div>
-        )}
-        {draft.status === "Annulée" && (
-          <input className="mt-2 h-10 w-full rounded-xl border border-red-200 bg-red-50 px-3 text-sm text-red-700 placeholder-red-300 outline-none focus:border-red-400" onChange={(e) => setDraft((c) => ({ ...c, cancellationReason: e.target.value }))} placeholder="Cause d’annulation" value={draft.cancellationReason} />
-        )}
-        {draft.status === "Réalisée" && (
-          <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-emerald-800">Photos d’intervention</p>
-              <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-semibold text-emerald-700 shadow-sm ring-1 ring-emerald-200">
-                <Camera className="h-3.5 w-3.5" /> Ajouter des photos
-                <input
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  multiple
-                  onChange={async (e) => {
-                    if (!e.target.files?.length) return;
-                    setFormError("");
-                    try {
-                      const paths = await uploadPhotos(e.target.files);
-                      setDraft((current) => ({ ...current, photoPaths: [...current.photoPaths, ...paths] }));
-                    } catch (error) {
-                      setFormError(error instanceof Error ? error.message : "Impossible d’envoyer les photos.");
-                    } finally {
-                      e.currentTarget.value = "";
-                    }
-                  }}
-                  type="file"
-                />
-              </label>
-            </div>
-            {isUploadingPhotos && <p className="mb-2 text-xs text-emerald-700">Upload en cours…</p>}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {draft.photoPaths.map((photoPath) => (
-                <div key={photoPath} className="relative overflow-hidden rounded-xl border border-emerald-200 bg-white">
-                  <Image alt="Photo d’intervention" className="h-24 w-full object-cover" height={160} src={photoPath} unoptimized width={240} />
-                  <button type="button" onClick={() => setDraft((current) => ({ ...current, photoPaths: current.photoPaths.filter((path) => path !== photoPath) }))} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-lg bg-slate-950/60 text-white">
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        <textarea className="mt-2 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" rows={2} onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Note optionnelle..." value={draft.note} />
-        {formError && <p className="mt-2 text-sm font-medium text-red-600">{formError}</p>}
-        <button type="submit" className="projects-btn-primary mt-2 flex h-10 w-full items-center justify-center gap-1.5 text-sm font-semibold sm:hidden" disabled={isUploadingPhotos}>
-          <Plus className="h-3.5 w-3.5" /> Ajouter
-        </button>
-      </form>
-
-      <div className="flex flex-col gap-2 rounded-2xl border border-slate-100 bg-white p-2 shadow-sm sm:flex-row sm:items-center">
-        <label className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs text-slate-500">
-          <Filter className="h-3.5 w-3.5 text-slate-400" />
-          <select className="min-w-0 bg-transparent outline-none" onChange={(e) => setStatusFilter(e.target.value as InterventionStatus | "Tous")} value={statusFilter}>
-            <option value="Tous">Tous statuts</option>
-            {INTERVENTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-          </select>
-        </label>
-        <label className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs text-slate-500">
-          <Calendar className="h-3.5 w-3.5 text-slate-400" />
-          <select className="min-w-0 bg-transparent outline-none" onChange={(e) => setMonthFilter(e.target.value)} value={monthFilter}>
-            <option value="Tous">Tous les mois</option>
-            {monthOptions.map((month) => <option key={month} value={month}>{month}</option>)}
-          </select>
-        </label>
-        <label className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs text-slate-500">
-          <FolderKanban className="h-3.5 w-3.5 text-slate-400" />
-          <select className="min-w-0 bg-transparent outline-none" onChange={(e) => setDepartmentFilter(e.target.value)} value={departmentFilter}>
-            <option value="Tous">Tous départements</option>
-            {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
-          </select>
-        </label>
-      </div>
-
-      <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
-        <div className="overflow-x-auto">
-        <div className="min-w-[1280px]">
-        <div className="grid grid-cols-[120px_90px_90px_1.2fr_0.9fr_1.2fr_110px_130px_1.5fr_80px] bg-slate-50/80 px-5 py-2.5">
-          {["Date", "Heure", "Dépt.", "Adresse", "Ville", "Prestation", "Prix", "Statut", "Note", ""].map((header) => (
-            <div key={header} className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{header}</div>
-          ))}
-        </div>
-        <div className="divide-y divide-slate-100">
-          {filteredInterventions.map((intervention) => (
-            <InterventionTableRow key={intervention.id} intervention={intervention} onDelete={onDelete} onEdit={setEditingIntervention} />
-          ))}
-        </div>
-        </div>
-        </div>
-      </div>
-
-      <div className="space-y-2 md:hidden">
-        {filteredInterventions.map((intervention) => (
-          <InterventionMobileCard key={intervention.id} intervention={intervention} onDelete={onDelete} onEdit={setEditingIntervention} />
-        ))}
-      </div>
-
-      {!filteredInterventions.length && <EmptyState label="Aucune intervention pour ces filtres." small />}
-
-      {editingIntervention && (
-        <InterventionEditor
-          intervention={editingIntervention}
-          onClose={() => setEditingIntervention(null)}
-          onSave={(patch) => onUpdate(editingIntervention.id, patch)}
-          onUploadPhotos={uploadPhotos}
-        />
-      )}
+    <div className="projects-surface p-[14px] text-center">
+      <p
+        className={`truncate text-[20px] font-bold ${
+          danger ? "text-[#dc2626]" : tones[tone]
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-1 text-[11px] font-medium text-[var(--tsp-text-secondary)]">
+        {label}
+      </p>
     </div>
   );
 }
 
-function InterventionStat({ danger, label, value }: { danger?: boolean; label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded-xl border border-slate-100 bg-white px-2 py-2 text-center shadow-sm sm:min-w-[120px] sm:px-4 sm:py-3">
-      <p className={`truncate text-base font-bold sm:text-lg ${danger ? "text-red-600" : "text-slate-800"}`}>{value}</p>
-      <p className="mt-0.5 truncate text-[9px] font-semibold uppercase tracking-wide text-slate-400 sm:text-[10px]">{label}</p>
-    </div>
-  );
-}
-
-function InterventionTableRow({ intervention, onDelete, onEdit }: {
+function InterventionTableRow({
+  intervention,
+  onDelete,
+  onEdit,
+  onPreview,
+}: {
   intervention: ProjectIntervention;
   onDelete: (id: string) => void;
   onEdit: (intervention: ProjectIntervention) => void;
+  onPreview: (intervention: ProjectIntervention) => void;
 }) {
   const meta = INTERVENTION_META[intervention.status];
 
   return (
-    <div className="grid grid-cols-[120px_90px_90px_1.2fr_0.9fr_1.2fr_110px_130px_1.5fr_80px] items-center px-5 py-3">
-      <div className="text-sm text-slate-600">{intervention.interventionDate || "—"}</div>
-      <div className="text-sm text-slate-600">{intervention.interventionTime || "—"}</div>
-      <div className="text-sm font-semibold text-slate-700">{intervention.department || "—"}</div>
-      <div className="truncate text-sm text-slate-600">{intervention.address || "—"}</div>
-      <div className="truncate text-sm text-slate-600">{intervention.city || "—"}</div>
-      <div className="truncate text-sm font-semibold text-slate-800">{intervention.prestation}</div>
-      <div className="text-sm font-semibold text-slate-700">{formatCurrency(intervention.price)}</div>
+    <div className="group grid grid-cols-[170px_1.1fr_1.2fr_110px_130px_1.5fr_110px] items-center px-5 py-3 transition hover:bg-white">
+      <div className="pr-4">
+        <p className="text-[13px] font-semibold text-[var(--tsp-text)]">
+          {formatTaskLongDate(intervention.interventionDate) || intervention.interventionDate || "—"}
+        </p>
+        <p className="mt-0.5 text-[12px] text-[var(--tsp-text-secondary)]">
+          {intervention.interventionTime || "Heure à définir"}
+        </p>
+      </div>
+
+      <div className="min-w-0 pr-4">
+        <p className="truncate text-[13px] font-semibold text-[var(--tsp-text)]">
+          {intervention.address || "Adresse à préciser"}
+        </p>
+        <p className="mt-0.5 truncate text-[12px] text-[var(--tsp-text-secondary)]">
+          {[intervention.city, intervention.department].filter(Boolean).join(" · ") || "Ville et département à préciser"}
+        </p>
+      </div>
+
+      <div className="min-w-0 pr-4">
+        <button
+          className="truncate text-left text-[13px] font-semibold text-[var(--tsp-text)] hover:text-[var(--tsp-accent-blue)]"
+          onClick={() => onPreview(intervention)}
+          type="button"
+        >
+          {intervention.prestation}
+        </button>
+        <p className="mt-0.5 text-[12px] text-[var(--tsp-text-secondary)]">
+          {intervention.photoPaths.length
+            ? `${intervention.photoPaths.length} photo${intervention.photoPaths.length > 1 ? "s" : ""}`
+            : "Sans photo"}
+        </p>
+      </div>
+
+      <div className="text-[13px] font-semibold text-[var(--tsp-text)]">
+        {formatCurrency(intervention.price)}
+      </div>
+
       <div>
-        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${meta.cls}`}>{intervention.status}</span>
+        <span
+          className={`inline-flex rounded-md px-2.5 py-1 text-[11px] font-semibold ${meta.cls}`}
+        >
+          {intervention.status}
+        </span>
       </div>
+
       <div className="min-w-0 pr-3">
-        <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">{buildInterventionMetaLine(intervention)}</p>
+        <p className="line-clamp-2 text-[12px] leading-[1.55] text-[var(--tsp-text-secondary)]">
+          {buildInterventionMetaLine(intervention)}
+        </p>
       </div>
+
       <div className="flex items-center justify-end gap-1">
-        <button onClick={() => onEdit(intervention)} type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-slate-600">
+        <button
+          aria-label="Aperçu"
+          className="projects-btn-secondary flex h-8 w-8 items-center justify-center opacity-0 transition group-hover:opacity-100 hover:opacity-100"
+          onClick={() => onPreview(intervention)}
+          type="button"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </button>
+        <button
+          aria-label="Modifier"
+          className="projects-btn-secondary flex h-8 w-8 items-center justify-center opacity-0 transition group-hover:opacity-100 hover:opacity-100"
+          onClick={() => onEdit(intervention)}
+          type="button"
+        >
           <Pencil className="h-3.5 w-3.5" />
         </button>
-        <button onClick={() => onDelete(intervention.id)} type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500">
+        <button
+          aria-label="Supprimer"
+          className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] opacity-0 transition group-hover:opacity-100 hover:bg-[#fef2f2] hover:opacity-100"
+          onClick={() => onDelete(intervention.id)}
+          type="button"
+        >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -2271,41 +2463,81 @@ function InterventionTableRow({ intervention, onDelete, onEdit }: {
   );
 }
 
-function InterventionMobileCard({ intervention, onDelete, onEdit }: {
+function InterventionMobileCard({
+  intervention,
+  onDelete,
+  onEdit,
+  onPreview,
+}: {
   intervention: ProjectIntervention;
   onDelete: (id: string) => void;
   onEdit: (intervention: ProjectIntervention) => void;
+  onPreview: (intervention: ProjectIntervention) => void;
 }) {
   const meta = INTERVENTION_META[intervention.status];
 
   return (
-    <article className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="mb-1.5 flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
-            <p className="truncate text-sm font-bold text-slate-900">{intervention.prestation}</p>
+    <article className="projects-surface p-[14px]">
+      <button className="block w-full text-left" onClick={() => onPreview(intervention)} type="button">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold leading-[1.45] text-[var(--tsp-text)]">
+              {intervention.prestation}
+            </p>
+            <p className="mt-1 text-[12px] text-[var(--tsp-text-secondary)]">
+              {formatInterventionDateTime(intervention)}
+            </p>
           </div>
-          <p className="text-xs text-slate-400">{formatInterventionDateTime(intervention)}</p>
+          <span
+            className={`inline-flex shrink-0 rounded-md px-2.5 py-1 text-[11px] font-semibold ${meta.cls}`}
+          >
+            {intervention.status}
+          </span>
         </div>
-        <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${meta.cls}`}>{intervention.status}</span>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <MobileTaskMeta label="Département" value={intervention.department || "—"} />
-        <MobileTaskMeta label="Ville" value={intervention.city || "—"} />
-        <MobileTaskMeta className="col-span-2" label="Adresse" value={intervention.address || "—"} />
-        <MobileTaskMeta label="Prix" value={formatCurrency(intervention.price)} />
-        <MobileTaskMeta label="Photos" value={String(intervention.photoPaths.length)} />
-      </div>
-      <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Détails</p>
-        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">{buildInterventionMetaLine(intervention)}</p>
-      </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
+          <MobileTaskMeta label="Département" value={intervention.department || "—"} />
+          <MobileTaskMeta label="Ville" value={intervention.city || "—"} />
+          <MobileTaskMeta className="col-span-2" label="Adresse" value={intervention.address || "—"} />
+          <MobileTaskMeta label="Prix" value={formatCurrency(intervention.price)} />
+          <MobileTaskMeta
+            label="Photos"
+            value={`${intervention.photoPaths.length} photo${intervention.photoPaths.length > 1 ? "s" : ""}`}
+          />
+        </div>
+
+        {buildInterventionMetaLine(intervention) !== "—" ? (
+          <div className="projects-surface-soft mt-3 px-3 py-3">
+            <p className="text-[12px] leading-[1.6] text-[var(--tsp-text-secondary)]">
+              {buildInterventionMetaLine(intervention)}
+            </p>
+          </div>
+        ) : null}
+      </button>
+
       <div className="mt-3 flex gap-2">
-        <button onClick={() => onEdit(intervention)} type="button" className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">
-          <Pencil className="h-3.5 w-3.5" /> Modifier
+        <button
+          className="projects-btn-secondary flex h-10 flex-1 items-center justify-center gap-1.5 text-[12px] font-semibold"
+          onClick={() => onPreview(intervention)}
+          type="button"
+        >
+          <Eye className="h-3.5 w-3.5" />
+          Aperçu
         </button>
-        <button onClick={() => onDelete(intervention.id)} type="button" className="flex h-9 w-11 items-center justify-center rounded-xl border border-red-100 text-red-500">
+        <button
+          aria-label="Modifier"
+          className="projects-btn-secondary flex h-10 w-10 items-center justify-center"
+          onClick={() => onEdit(intervention)}
+          type="button"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          aria-label="Supprimer"
+          className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2]"
+          onClick={() => onDelete(intervention.id)}
+          type="button"
+        >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -2317,127 +2549,662 @@ function buildInterventionMetaLine(intervention: ProjectIntervention) {
   const details = [];
 
   if (intervention.note.trim()) details.push(intervention.note.trim());
-  if (intervention.status === "Reportée" && intervention.reportDate) details.push(`Nouvelle date : ${intervention.reportDate}`);
-  if (intervention.status === "Annulée" && intervention.cancellationReason.trim()) details.push(`Cause : ${intervention.cancellationReason.trim()}`);
-  if (intervention.status === "Réalisée" && intervention.photoPaths.length > 0) details.push(`${intervention.photoPaths.length} photo${intervention.photoPaths.length > 1 ? "s" : ""}`);
+  if (intervention.status === "Reportée" && intervention.reportDate) {
+    details.push(`Nouvelle date : ${formatTaskLongDate(intervention.reportDate) || intervention.reportDate}`);
+  }
+  if (
+    intervention.status === "Annulée" &&
+    intervention.cancellationReason.trim()
+  ) {
+    details.push(`Cause : ${intervention.cancellationReason.trim()}`);
+  }
+  if (
+    intervention.status === "Réalisée" &&
+    intervention.photoPaths.length > 0
+  ) {
+    details.push(
+      `${intervention.photoPaths.length} photo${intervention.photoPaths.length > 1 ? "s" : ""}`
+    );
+  }
 
   return details.join(" · ") || "—";
 }
 
-function InterventionEditor({ intervention, onClose, onSave, onUploadPhotos }: {
-  intervention: ProjectIntervention;
-  onClose: () => void;
-  onSave: (patch: Partial<ProjectIntervention>) => void;
-  onUploadPhotos: (files: FileList | File[]) => Promise<string[]>;
-}) {
-  const [draft, setDraft] = useState<InterventionDraft>({
-    projectId: intervention.projectId,
-    interventionDate: intervention.interventionDate,
-    interventionTime: intervention.interventionTime,
-    department: intervention.department,
-    address: intervention.address,
-    city: intervention.city,
-    prestation: intervention.prestation,
-    price: intervention.price,
-    status: intervention.status,
-    reportDate: intervention.reportDate,
-    cancellationReason: intervention.cancellationReason,
-    photoPaths: intervention.photoPaths,
-    note: intervention.note,
-  });
-  const [error, setError] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
+function buildInterventionSummarySentences(intervention: ProjectIntervention) {
+  const createdAt = formatProjectDateTime(intervention.createdAt);
+  const scheduledDate = formatTaskLongDate(intervention.interventionDate);
+  const reportedDate = formatTaskLongDate(intervention.reportDate);
 
-  const submit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const cleanDraft = sanitizeInterventionDraft(draft);
-    const validationError = validateInterventionDraft(cleanDraft);
-    if (validationError) return setError(validationError);
-    setError("");
-    onSave(cleanDraft);
-    onClose();
-  };
+  const scheduleParts = [
+    scheduledDate ? `prévue le ${scheduledDate}` : "",
+    intervention.interventionTime ? `à ${intervention.interventionTime}` : "",
+    intervention.address ? `au ${intervention.address}` : "",
+    intervention.city ? `à ${intervention.city}` : "",
+    intervention.department ? `(${intervention.department})` : "",
+  ].filter(Boolean);
+
+  const sentences = [
+    createdAt
+      ? `Cette intervention a été créée le ${createdAt}${intervention.createdBy ? ` par ${intervention.createdBy}` : ""}.`
+      : "",
+    scheduleParts.length
+      ? `Elle est ${scheduleParts.join(" ")}.`
+      : "",
+    intervention.prestation
+      ? `La prestation prévue est ${intervention.prestation.toLowerCase()} pour un montant de ${formatCurrency(intervention.price)}.`
+      : "",
+    `Elle est actuellement marquée comme ${intervention.status.toLowerCase()}.`,
+    intervention.status === "Reportée" && reportedDate
+      ? `La nouvelle date annoncée est le ${reportedDate}.`
+      : "",
+    intervention.status === "Annulée" && intervention.cancellationReason.trim()
+      ? `La cause d’annulation indiquée est : ${intervention.cancellationReason.trim()}.`
+      : "",
+    intervention.status === "Réalisée" && intervention.photoPaths.length
+      ? `${intervention.photoPaths.length} photo${intervention.photoPaths.length > 1 ? "s ont été ajoutées" : " a été ajoutée"} comme preuve d’exécution.`
+      : "",
+  ].filter(Boolean);
+
+  return sentences;
+}
+
+function InterventionPreviewPage({
+  activityLogs,
+  intervention,
+  onBack,
+  onDelete,
+  onEdit,
+}: {
+  activityLogs: ProjectActivityLog[];
+  intervention: ProjectIntervention;
+  onBack: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+}) {
+  const meta = INTERVENTION_META[intervention.status];
+  const history = useMemo(
+    () =>
+      activityLogs
+        .filter(
+          (log) =>
+            log.entityType === "intervention" && log.entityId === intervention.id
+        )
+        .slice(0, 12),
+    [activityLogs, intervention.id]
+  );
+  const summarySentences = buildInterventionSummarySentences(intervention);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4">
-      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-[760px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/5 sm:max-h-[calc(100dvh-2rem)]">
-        <div className="shrink-0 border-b border-slate-100 px-4 py-4 sm:px-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Modifier l’intervention</h2>
-              <p className="mt-0.5 text-xs text-slate-400">Mettez à jour les détails, le statut et les preuves.</p>
+    <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)] p-3 sm:p-5">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  aria-label="Retour"
+                  className="projects-btn-secondary flex h-8 w-8 shrink-0 items-center justify-center sm:h-9 sm:w-9"
+                  onClick={onBack}
+                  type="button"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    aria-label="Modifier"
+                    className="projects-btn-secondary flex h-8 w-8 items-center justify-center sm:h-9 sm:w-9"
+                    onClick={onEdit}
+                    type="button"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    aria-label="Supprimer"
+                    className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2] sm:h-9 sm:w-9"
+                    onClick={onDelete}
+                    type="button"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <p className="projects-label">Interventions</p>
+                <div
+                  aria-level={2}
+                  className="mt-1 font-bold text-[var(--tsp-text)]"
+                  role="heading"
+                  style={TASK_PANEL_TITLE_STYLE}
+                >
+                  Aperçu intervention
+                </div>
+                <p className="mt-2 break-words text-[15px] font-semibold leading-[1.45] text-[var(--tsp-text)] sm:text-[16px]">
+                  {intervention.prestation}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <span className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${meta.cls}`}>
+                  {intervention.status}
+                </span>
+                <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                  {formatInterventionDateTime(intervention)}
+                </span>
+                <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)]">
+                  {formatCurrency(intervention.price)}
+                </span>
+              </div>
             </div>
-            <button onClick={onClose} type="button" className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
-              <X className="h-4 w-4" />
-            </button>
+          </div>
+
+          {intervention.note.trim() ? (
+            <div className="projects-surface p-[14px] sm:p-5">
+              <p className="projects-label mb-2">Note</p>
+              <p className="whitespace-pre-wrap text-[13px] leading-[1.6] text-[var(--tsp-text-secondary)]">
+                {intervention.note}
+              </p>
+            </div>
+          ) : null}
+
+          {intervention.photoPaths.length ? (
+            <div className="projects-surface p-[14px] sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="projects-label mb-1 flex items-center gap-1.5">
+                    <Camera className="h-3.5 w-3.5" />
+                    Photos d’intervention
+                  </p>
+                  <p className="text-[12px] text-[var(--tsp-text-secondary)]">
+                    {intervention.photoPaths.length} photo{intervention.photoPaths.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {intervention.photoPaths.map((photoPath) => (
+                  <a
+                    key={photoPath}
+                    className="relative block overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white"
+                    href={photoPath}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <Image
+                      alt="Photo d’intervention"
+                      className="h-32 w-full object-cover"
+                      height={256}
+                      src={photoPath}
+                      unoptimized
+                      width={256}
+                    />
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {history.length ? (
+            <div className="projects-surface p-[14px] sm:p-5">
+              <p className="projects-label mb-3">Historique</p>
+              <div className="space-y-2">
+                {history.map((log) => (
+                  <ActivityLogItem key={log.id} log={log} />
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <p className="projects-label mb-3">Informations</p>
+            <div className="projects-surface-soft px-3 py-3.5">
+              <div className="space-y-2">
+                {summarySentences.map((sentence, index) => (
+                  <p
+                    key={`${intervention.id}-summary-${index}`}
+                    className="text-[13px] leading-[1.65] text-[var(--tsp-text-secondary)]"
+                  >
+                    {sentence}
+                  </p>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-        <form onSubmit={submit} className="grid gap-3 overflow-y-auto px-4 py-4 sm:grid-cols-2 sm:gap-4 sm:px-6">
-          <input type="date" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-1" onChange={(e) => setDraft((c) => ({ ...c, interventionDate: e.target.value }))} value={draft.interventionDate} />
-          <input type="time" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-1" onChange={(e) => setDraft((c) => ({ ...c, interventionTime: e.target.value }))} value={draft.interventionTime} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Département" value={draft.department} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, city: e.target.value }))} placeholder="Ville" value={draft.city} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, address: e.target.value }))} placeholder="Adresse" value={draft.address} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, prestation: e.target.value }))} placeholder="Prestation" value={draft.prestation} />
-          <input type="number" min="0" step="0.01" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, price: parsePrice(e.target.value) }))} placeholder="Prix" value={draft.price || ""} />
-          <select className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((current) => applyInterventionStatus(current, e.target.value as InterventionStatus))} value={draft.status}>
-            {INTERVENTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-          </select>
-          {draft.status === "Reportée" && (
-            <input type="date" className="h-10 rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm text-amber-800 outline-none sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, reportDate: e.target.value }))} value={draft.reportDate} />
-          )}
-          {draft.status === "Annulée" && (
-            <input className="h-10 rounded-xl border border-red-200 bg-red-50 px-3 text-sm text-red-700 outline-none sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, cancellationReason: e.target.value }))} placeholder="Cause d’annulation" value={draft.cancellationReason} />
-          )}
-          {draft.status === "Réalisée" && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 sm:col-span-2">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-emerald-800">Photos d’intervention</p>
-                <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-semibold text-emerald-700 shadow-sm ring-1 ring-emerald-200">
-                  <Camera className="h-3.5 w-3.5" /> Ajouter
+      </div>
+    </div>
+  );
+}
+
+function InterventionEditorPage({
+  defaultProjectId,
+  intervention,
+  onClose,
+  onSave,
+}: {
+  defaultProjectId: string;
+  intervention: ProjectIntervention | null;
+  onClose: () => void;
+  onSave: (draft: Omit<ProjectIntervention, "id">, interventionId?: string) => void;
+}) {
+  const [draft, setDraft] = useState<InterventionDraft>(
+    intervention ?? buildBlankIntervention(defaultProjectId)
+  );
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const isEditing = Boolean(intervention);
+  const fileInputId = useMemo(() => `intervention-photos-${createId("input")}`, []);
+
+  const handlePhotoUpload = useCallback(
+    async (files: FileList | null) => {
+      if (!files?.length) return;
+
+      setError("");
+      setIsUploadingPhotos(true);
+      try {
+        const formData = new FormData();
+        formData.append("projectId", defaultProjectId);
+        Array.from(files).forEach((file) => formData.append("files", file));
+
+        const response = await fetch("/api/projects/interventions/upload", {
+          body: formData,
+          method: "POST",
+        });
+
+        const payload = (await response.json()) as {
+          error?: string;
+          paths?: string[];
+        };
+
+        if (!response.ok || !payload.paths) {
+          throw new Error(payload.error || "Impossible d’envoyer les photos.");
+        }
+
+        setDraft((current) => ({
+          ...current,
+          photoPaths: [...current.photoPaths, ...payload.paths!],
+        }));
+      } catch (uploadError) {
+        setError(
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Impossible d’envoyer les photos."
+        );
+      } finally {
+        setIsUploadingPhotos(false);
+      }
+    },
+    [defaultProjectId]
+  );
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setIsSubmitting(true);
+      const cleanDraft = sanitizeInterventionDraft({
+        ...draft,
+        projectId: defaultProjectId,
+      });
+      const validationError = validateInterventionDraft(cleanDraft);
+
+      if (validationError) {
+        setError(validationError);
+        setIsSubmitting(false);
+        return;
+      }
+
+      setError("");
+      onSave(cleanDraft, intervention?.id);
+      setIsSubmitting(false);
+    },
+    [defaultProjectId, draft, intervention?.id, onSave]
+  );
+
+  return (
+    <div className="border-t border-[var(--tsp-border)] bg-[var(--tsp-bg-page)]">
+      <form
+        className="grid gap-4 p-3 sm:p-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]"
+        onSubmit={handleSubmit}
+      >
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-3">
+                <button
+                  className="projects-btn-secondary flex h-10 w-10 shrink-0 items-center justify-center"
+                  onClick={onClose}
+                  type="button"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+                <div className="min-w-0">
+                  <p className="projects-label">Interventions</p>
+                  <div
+                    aria-level={2}
+                    className="mt-1 font-bold text-[var(--tsp-text)]"
+                    role="heading"
+                    style={TASK_PANEL_TITLE_STYLE}
+                  >
+                    {isEditing ? "Modifier l’intervention" : "Nouvelle intervention"}
+                  </div>
+                </div>
+              </div>
+              <span className="hidden rounded-md bg-[var(--tsp-bg-surface)] px-3 py-1 text-[11px] font-semibold text-[var(--tsp-text-secondary)] sm:inline-flex">
+                {isEditing ? "Mise à jour" : "Création"}
+              </span>
+            </div>
+          </div>
+
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="grid gap-3">
+              <div>
+                <label className="projects-label mb-2 block">Prestation</label>
+                <input
+                  autoFocus
+                  required
+                  className="h-11 w-full px-3 text-[13px]"
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      prestation: e.target.value,
+                    }))
+                  }
+                  placeholder="Ex : Nettoyage canapé premium"
+                  value={draft.prestation}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="projects-label mb-2 flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5" />
+                    Date d’intervention
+                  </label>
+                  <input
+                    type="date"
+                    className="h-11 w-full px-3 text-[13px]"
+                    onChange={(e) =>
+                      setDraft((current) => ({
+                        ...current,
+                        interventionDate: e.target.value,
+                      }))
+                    }
+                    value={draft.interventionDate}
+                  />
+                </div>
+                <div>
+                  <label className="projects-label mb-2 flex items-center gap-1.5">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    Heure
+                  </label>
+                  <input
+                    type="time"
+                    className="h-11 w-full px-3 text-[13px]"
+                    onChange={(e) =>
+                      setDraft((current) => ({
+                        ...current,
+                        interventionTime: e.target.value,
+                      }))
+                    }
+                    value={draft.interventionTime}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="projects-label mb-2 block">Département</label>
+                  <input
+                    className="h-11 w-full px-3 text-[13px]"
+                    onChange={(e) =>
+                      setDraft((current) => ({
+                        ...current,
+                        department: e.target.value,
+                      }))
+                    }
+                    placeholder="Ex : 75"
+                    value={draft.department}
+                  />
+                </div>
+                <div>
+                  <label className="projects-label mb-2 block">Ville</label>
+                  <input
+                    className="h-11 w-full px-3 text-[13px]"
+                    onChange={(e) =>
+                      setDraft((current) => ({
+                        ...current,
+                        city: e.target.value,
+                      }))
+                    }
+                    placeholder="Ex : Paris"
+                    value={draft.city}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="projects-label mb-2 block">Adresse</label>
+                <input
+                  className="h-11 w-full px-3 text-[13px]"
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      address: e.target.value,
+                    }))
+                  }
+                  placeholder="Adresse complète"
+                  value={draft.address}
+                />
+              </div>
+            </div>
+          </div>
+
+          {draft.status === "Réalisée" ? (
+            <div className="projects-surface p-[14px] sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="projects-label mb-1 flex items-center gap-1.5">
+                    <Camera className="h-3.5 w-3.5" />
+                    Photos d’intervention
+                  </p>
+                  <p className="text-[12px] text-[var(--tsp-text-secondary)]">
+                    Ajoutez les preuves avant/après.
+                  </p>
+                </div>
+                <label className="projects-btn-secondary inline-flex h-10 cursor-pointer items-center gap-2 px-3 text-[12px] font-semibold">
+                  <Upload className="h-3.5 w-3.5" />
+                  Ajouter
                   <input
                     accept="image/png,image/jpeg,image/webp"
                     className="hidden"
+                    id={fileInputId}
                     multiple
-                    onChange={async (e) => {
-                      if (!e.target.files?.length) return;
-                      setError("");
-                      setIsUploading(true);
-                      try {
-                        const paths = await onUploadPhotos(e.target.files);
-                        setDraft((current) => ({ ...current, photoPaths: [...current.photoPaths, ...paths] }));
-                      } catch (uploadError) {
-                        setError(uploadError instanceof Error ? uploadError.message : "Impossible d’envoyer les photos.");
-                      } finally {
-                        setIsUploading(false);
-                        e.currentTarget.value = "";
-                      }
+                    onChange={async (event) => {
+                      await handlePhotoUpload(event.target.files);
+                      event.currentTarget.value = "";
                     }}
                     type="file"
                   />
                 </label>
               </div>
-              {isUploading && <p className="mb-2 text-xs text-emerald-700">Upload en cours…</p>}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {draft.photoPaths.map((photoPath) => (
-                  <div key={photoPath} className="relative overflow-hidden rounded-xl border border-emerald-200 bg-white">
-                    <Image alt="Photo d’intervention" className="h-24 w-full object-cover" height={160} src={photoPath} unoptimized width={240} />
-                    <button type="button" onClick={() => setDraft((current) => ({ ...current, photoPaths: current.photoPaths.filter((path) => path !== photoPath) }))} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-lg bg-slate-950/60 text-white">
-                      <X className="h-3.5 w-3.5" />
+
+              {isUploadingPhotos ? (
+                <p className="mt-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                  Upload en cours…
+                </p>
+              ) : null}
+
+              {draft.photoPaths.length ? (
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {draft.photoPaths.map((photoPath) => (
+                    <div
+                      key={photoPath}
+                      className="relative overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white"
+                    >
+                      <Image
+                        alt="Photo d’intervention"
+                        className="h-32 w-full object-cover"
+                        height={256}
+                        src={photoPath}
+                        unoptimized
+                        width={256}
+                      />
+                      <button
+                        className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-md bg-slate-950/60 text-white"
+                        onClick={() =>
+                          setDraft((current) => ({
+                            ...current,
+                            photoPaths: current.photoPaths.filter(
+                              (path) => path !== photoPath
+                            ),
+                          }))
+                        }
+                        type="button"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="projects-surface-soft mt-4 px-3 py-3 text-[12px] text-[var(--tsp-text-secondary)]">
+                  Aucune photo ajoutée pour le moment.
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="space-y-4">
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div>
+              <label className="projects-label mb-2 block">Statut</label>
+              <div className="grid grid-cols-2 gap-2">
+                {INTERVENTION_STATUSES.map((status) => {
+                  const active = draft.status === status;
+                  const meta = INTERVENTION_META[status];
+                  return (
+                    <button
+                      key={status}
+                      className={`flex h-10 items-center justify-center rounded-[10px] border text-[11px] font-semibold transition ${
+                        active
+                          ? meta.cls
+                          : "border-[var(--tsp-border)] bg-white text-[var(--tsp-text-secondary)]"
+                      }`}
+                      onClick={() =>
+                        setDraft((current) =>
+                          applyInterventionStatus(current, status)
+                        )
+                      }
+                      type="button"
+                    >
+                      {status}
                     </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-          )}
-          <textarea className="min-h-[96px] resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 outline-none sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Note" value={draft.note} />
-          {error && <p className="text-sm font-medium text-red-600 sm:col-span-2">{error}</p>}
-          <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:col-span-2 sm:m-0 sm:flex-row sm:justify-end sm:border-t-0 sm:bg-transparent sm:p-0">
-            <button onClick={onClose} type="button" className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
-            <button type="submit" className="projects-btn-primary h-10 px-6 text-sm font-semibold" disabled={isUploading}>Enregistrer</button>
+
+            <div className="mt-4">
+              <label className="projects-label mb-2 block">Prix</label>
+              <input
+                min="0"
+                step="0.01"
+                type="number"
+                className="h-11 w-full px-3 text-[13px]"
+                onChange={(e) =>
+                  setDraft((current) => ({
+                    ...current,
+                    price: parsePrice(e.target.value),
+                  }))
+                }
+                placeholder="0"
+                value={draft.price || ""}
+              />
+            </div>
+
+            {draft.status === "Reportée" ? (
+              <div className="mt-4">
+                <label className="projects-label mb-2 block">Nouvelle date</label>
+                <input
+                  type="date"
+                  className="h-11 w-full px-3 text-[13px]"
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      reportDate: e.target.value,
+                    }))
+                  }
+                  value={draft.reportDate}
+                />
+              </div>
+            ) : null}
+
+            {draft.status === "Annulée" ? (
+              <div className="mt-4">
+                <label className="projects-label mb-2 block">Cause d’annulation</label>
+                <textarea
+                  className="min-h-[100px] w-full resize-none px-3 py-3 text-[13px]"
+                  onChange={(e) =>
+                    setDraft((current) => ({
+                      ...current,
+                      cancellationReason: e.target.value,
+                    }))
+                  }
+                  placeholder="Expliquez la cause d’annulation"
+                  value={draft.cancellationReason}
+                />
+              </div>
+            ) : null}
+
+            <div className="mt-4">
+              <label className="projects-label mb-2 block">Note</label>
+              <textarea
+                className="min-h-[120px] w-full resize-none px-3 py-3 text-[13px]"
+                onChange={(e) =>
+                  setDraft((current) => ({
+                    ...current,
+                    note: e.target.value,
+                  }))
+                }
+                placeholder="Contexte, accès, consignes, détails terrain…"
+                value={draft.note}
+              />
+            </div>
+
+            {error ? (
+              <p className="mt-4 rounded-[10px] bg-[#fef2f2] px-3 py-2 text-[12px] font-medium text-[#dc2626]">
+                {error}
+              </p>
+            ) : null}
           </div>
-        </form>
-      </div>
+
+          <div className="projects-surface p-[14px] sm:p-5">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row">
+              <button
+                className="projects-btn-secondary h-11 flex-1 text-[13px] font-semibold"
+                onClick={onClose}
+                type="button"
+              >
+                Annuler
+              </button>
+              <button
+                className="projects-btn-primary h-11 flex-1 text-[13px] font-semibold"
+                disabled={isSubmitting || isUploadingPhotos}
+                type="submit"
+              >
+                {isSubmitting
+                  ? "Enregistrement..."
+                  : isEditing
+                    ? "Enregistrer les changements"
+                    : "Créer l’intervention"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }
