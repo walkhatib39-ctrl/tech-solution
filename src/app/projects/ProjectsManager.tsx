@@ -1334,56 +1334,53 @@ function MobileTaskCard({ onChangeStatus, onDeleteTask, onEditTask, task }: {
 
   return (
     <article className={`projects-surface p-[14px] ${isDone ? "opacity-60" : ""}`}>
-      <div className="flex items-start gap-3">
-        <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${sm.dot}`} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <button
-              className={`block min-w-0 flex-1 text-left text-[14px] font-semibold leading-[1.4] text-[var(--tsp-text)] ${isDone ? "line-through decoration-slate-400 decoration-2" : ""}`}
-              onClick={() => onEditTask(task)}
-              type="button"
-            >
-              {task.title}
+      <div className="min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <button
+            className={`block min-w-0 flex-1 text-left text-[13px] font-semibold leading-[1.35] text-[var(--tsp-text)] ${isDone ? "line-through decoration-slate-400 decoration-2" : ""}`}
+            onClick={() => onEditTask(task)}
+            type="button"
+          >
+            {task.title}
+          </button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button onClick={() => onEditTask(task)} type="button" className="flex h-7 w-7 items-center justify-center rounded-[8px] text-slate-300" title="Modifier">
+              <Pencil className="h-3.5 w-3.5" />
             </button>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${PRIORITY_META[task.priority].cls}`}>{task.priority}</span>
-              <button onClick={() => onEditTask(task)} type="button" className="flex h-7 w-7 items-center justify-center rounded-[8px] text-slate-300" title="Modifier">
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button onClick={() => onDeleteTask(task.id)} type="button" className="flex h-7 w-7 items-center justify-center rounded-[8px] text-slate-300" title="Supprimer">
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <button onClick={() => onDeleteTask(task.id)} type="button" className="flex h-7 w-7 items-center justify-center rounded-[8px] text-slate-300" title="Supprimer">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
+        </div>
 
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <select
-              className={`h-7 appearance-none rounded-md border-0 px-2.5 text-[11px] font-semibold outline-none ${sm.badge}`}
-              onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
-              value={task.status}
-            >
-              {TASK_STATUSES.map((s) => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
-            </select>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <select
+            className={`h-7 appearance-none rounded-md border-0 px-2.5 pr-6 text-[11px] font-semibold outline-none ${sm.badge}`}
+            onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
+            value={task.status}
+          >
+            {TASK_STATUSES.map((s) => <option key={s} value={s} className="bg-white text-slate-800">{s}</option>)}
+          </select>
+          <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${PRIORITY_META[task.priority].cls}`}>{task.priority}</span>
+        </div>
+
+        {task.note ? (
+          <p className={`mt-2 line-clamp-2 text-[12px] leading-[1.45] text-[var(--tsp-text-secondary)] ${isDone ? "line-through" : ""}`}>
+            {task.note}
+          </p>
+        ) : null}
+
+        <div className="mt-3 h-px bg-[var(--tsp-border)]" />
+
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tsp-navy)] text-[10px] font-bold text-white">
+              {initials}
+            </div>
+            <span className="truncate text-[12px] text-[var(--tsp-text-secondary)]">{task.responsible || "Non assignée"}</span>
           </div>
-
-          {task.note ? (
-            <p className={`mt-2 line-clamp-2 text-[12px] leading-[1.45] text-[var(--tsp-text-secondary)] ${isDone ? "line-through" : ""}`}>
-              {task.note}
-            </p>
-          ) : null}
-
-          <div className="mt-3 h-px bg-[var(--tsp-border)]" />
-
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--tsp-navy)] text-[10px] font-bold text-white">
-                {initials}
-              </div>
-              <span className="truncate text-[12px] text-[var(--tsp-text-secondary)]">{task.responsible || "Non assignée"}</span>
-            </div>
-            <div className={`shrink-0 text-[12px] font-medium ${task.dueDate && isOverdue(task) && !isDone ? "text-[var(--tsp-red)]" : "text-[var(--tsp-text-secondary)]"}`}>
-              {dateRange}
-            </div>
+          <div className={`shrink-0 text-[12px] font-medium ${task.dueDate && isOverdue(task) && !isDone ? "text-[var(--tsp-red)]" : "text-[var(--tsp-text-secondary)]"}`}>
+            {dateRange}
           </div>
         </div>
       </div>
