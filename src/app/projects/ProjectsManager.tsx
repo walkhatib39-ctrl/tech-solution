@@ -2657,44 +2657,48 @@ function TaskPreviewPage({
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
         <div className="space-y-4">
           <div className="projects-surface p-[14px] sm:p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-3">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
                 <button
-                  className="projects-btn-secondary flex h-10 w-10 shrink-0 items-center justify-center"
+                  aria-label="Retour"
+                  className="projects-btn-secondary flex h-8 w-8 shrink-0 items-center justify-center sm:h-9 sm:w-9"
                   onClick={onBack}
                   type="button"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </button>
-                <div className="min-w-0">
-                  <p className="projects-label">Tâches</p>
-                  <div
-                    aria-level={2}
-                    className="mt-1 font-bold text-[var(--tsp-text)]"
-                    role="heading"
-                    style={TASK_PANEL_TITLE_STYLE}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    aria-label="Modifier"
+                    className="projects-btn-secondary flex h-8 w-8 items-center justify-center sm:h-9 sm:w-9"
+                    onClick={onEdit}
+                    type="button"
                   >
-                    Aperçu de la tâche
-                  </div>
-                  <p className="mt-2 text-[15px] font-semibold leading-[1.35] text-[var(--tsp-text)]">{task.title}</p>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    aria-label="Supprimer"
+                    className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2] sm:h-9 sm:w-9"
+                    onClick={onDelete}
+                    type="button"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  className="projects-btn-secondary flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
-                  onClick={onEdit}
-                  type="button"
+              <div className="min-w-0 w-full">
+                <p className="projects-label">Tâches</p>
+                <div
+                  aria-level={2}
+                  className="mt-1 font-bold text-[var(--tsp-text)]"
+                  role="heading"
+                  style={TASK_PANEL_TITLE_STYLE}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Modifier
-                </button>
-                <button
-                  className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-[var(--tsp-border)] text-[var(--tsp-red)] transition hover:bg-[#fef2f2]"
-                  onClick={onDelete}
-                  type="button"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                  Aperçu de la tâche
+                </div>
+                <p className="mt-2 w-full break-words text-[15px] font-semibold leading-[1.45] text-[var(--tsp-text)] sm:text-[16px]">
+                  {task.title}
+                </p>
               </div>
             </div>
           </div>
