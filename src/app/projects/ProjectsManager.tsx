@@ -132,6 +132,9 @@ const PROJECT_TABS: Array<{ label: ProjectTab; icon: React.ElementType; shortLab
   { label: "Suivi",         icon: BarChart3         },
 ];
 
+const PROJECT_BASE_TABS: ProjectTab[] = ["Pilotage", "Tâches", "Docs"];
+const WE_CLEANED_PROJECT_ID = "project-wecleaned";
+
 const SECTION_COLORS = ["#d9140e", "#39547c", "#0f9f6e", "#d97706", "#6d5dfc", "#0891b2", "#be123c"];
 const PROJECT_TITLE_STYLE = { fontSize: "clamp(1rem, 0.92rem + 0.55vw, 1.35rem)", letterSpacing: 0 };
 const TASK_PANEL_TITLE_STYLE = { fontSize: "13px", letterSpacing: 0, lineHeight: 1.2 };
@@ -369,6 +372,20 @@ function buildTrackingTemplate(project: ManagedProject): ProjectTrackingField[] 
   }));
 }
 
+function getEnabledProjectTabs(projectId?: string) {
+  if (projectId === WE_CLEANED_PROJECT_ID) {
+    return PROJECT_TABS.filter(
+      (tab) =>
+        tab.label === "Pilotage" ||
+        tab.label === "Tâches" ||
+        tab.label === "Docs" ||
+        tab.label === "Interventions"
+    );
+  }
+
+  return PROJECT_TABS.filter((tab) => PROJECT_BASE_TABS.includes(tab.label));
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
 
 interface ProjectsManagerProps {
@@ -522,6 +539,10 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
 
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
   }, [currentUser, data.projectAccess, data.teamUsers, selectedProject]);
+  const enabledProjectTabs = useMemo(
+    () => getEnabledProjectTabs(selectedProject?.id),
+    [selectedProject?.id]
+  );
   const shouldHideProjectStats =
     activeTab === "Docs" ||
     (activeTab === "Tâches" && (isTaskEditorOpen || previewTask !== null)) ||
@@ -563,6 +584,12 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
     if (!projectFiles.some((f) => f.id === selectedDocFileId))
       setSelectedDocFileId(projectFiles[0]?.id ?? "");
   }, [selectedDocFileId, projectFiles]);
+
+  useEffect(() => {
+    if (!enabledProjectTabs.some((tab) => tab.label === activeTab)) {
+      setActiveTab("Pilotage");
+    }
+  }, [activeTab, enabledProjectTabs]);
 
   useEffect(() => {
     setIsInterventionEditorOpen(false);
@@ -1161,8 +1188,8 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
                 </div>
 
                 <div className="mt-3 flex flex-col gap-2 sm:mt-5 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
-                  <nav className="grid grid-cols-5 gap-1 border-b border-white/10 sm:flex sm:min-w-0 sm:overflow-x-auto sm:border-b-0">
-                    {PROJECT_TABS.map(({ label, icon: Icon, shortLabel }) => {
+                  <nav className={`grid gap-1 border-b border-white/10 sm:flex sm:min-w-0 sm:overflow-x-auto sm:border-b-0 ${enabledProjectTabs.length === 3 ? "grid-cols-3" : enabledProjectTabs.length === 4 ? "grid-cols-4" : "grid-cols-5"}`}>
+                    {enabledProjectTabs.map(({ label, icon: Icon, shortLabel }) => {
                       const active = activeTab === label;
                       return (
                         <button key={label} onClick={() => setActiveTab(label)} type="button"
