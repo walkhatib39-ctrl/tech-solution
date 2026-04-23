@@ -1,6 +1,6 @@
 # Tech-Solution - contexte projet et déploiement
 
-Dernière mise à jour : 2026-04-22
+Dernière mise à jour : 2026-04-23
 
 Ce document sert de briefing rapide pour un nouveau développeur. Il décrit le site, l'hébergement, le dépôt GitHub, la stack technique, la base de données et la procédure de déploiement actuelle.
 
@@ -171,7 +171,14 @@ Fonctionnalités actuelles :
 - Onglet Docs avec dossiers et fichiers `.md` créés dans l'app
 - Onglet Pilotage calculé à partir des tâches
 - Onglet Suivi avec indicateurs libres
-- Onglet Interventions avec date, département, ville, intervention, prix, statut et note
+- Onglet Interventions avec date, heure, département, adresse, ville, prestation, prix, statut, note et pièces justificatives photo pour les interventions réalisées
+
+Règles métier actuelles pour `Interventions` :
+
+- Statuts autorisés : `Prévue`, `Réalisée`, `Reportée`, `Annulée`
+- Si statut `Réalisée` : au moins une photo d’intervention est obligatoire
+- Si statut `Reportée` : une nouvelle date est obligatoire
+- Si statut `Annulée` : une cause d’annulation est obligatoire
 
 Projet important actuellement :
 

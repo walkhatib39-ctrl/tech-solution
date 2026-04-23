@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
   AlertCircle,
   BarChart3,
   BookOpen,
   Calendar,
+  Camera,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -69,6 +71,7 @@ type ProjectTab = "Pilotage" | "Tâches" | "Docs" | "Interventions" | "Suivi";
 type WorkspaceView = "project" | "team";
 type ProjectStats = { blocked: number; done: number; overdue: number; progress: number; total: number };
 type TaskSectionGroup = { id: string | null; color: string; name: string; tasks: ManagedTask[] };
+type InterventionDraft = Omit<ProjectIntervention, "id">;
 
 const EMPTY_DATA: ProjectsData = {
   projects: [], taskSections: [], tasks: [], docFolders: [], docFiles: [],
@@ -108,8 +111,6 @@ const INTERVENTION_META: Record<InterventionStatus, { cls: string; dot: string }
   Réalisée:    { cls: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
   Reportée:    { cls: "bg-amber-50 text-amber-700",     dot: "bg-amber-500" },
   Annulée:     { cls: "bg-red-50 text-red-600",         dot: "bg-red-500" },
-  "À facturer":{ cls: "bg-violet-50 text-violet-700",   dot: "bg-violet-500" },
-  Payée:       { cls: "bg-slate-100 text-slate-600",    dot: "bg-slate-500" },
 };
 
 const STATUS_DOT: Record<ManagedProject["status"], string> = {
@@ -157,11 +158,16 @@ function buildBlankIntervention(projectId: string): Omit<ProjectIntervention, "i
   return {
     projectId,
     interventionDate: new Date().toISOString().slice(0, 10),
+    interventionTime: "",
     department: "",
+    address: "",
     city: "",
-    intervention: "",
+    prestation: "",
     price: 0,
-    status: "Réalisée",
+    status: "Prévue",
+    reportDate: "",
+    cancellationReason: "",
+    photoPaths: [],
     note: "",
   };
 }
@@ -178,6 +184,70 @@ function formatCurrency(value: number) {
     maximumFractionDigits: 0,
     style: "currency",
   }).format(value);
+}
+
+function formatInterventionDateTime(intervention: ProjectIntervention) {
+  return [
+    intervention.interventionDate || "Date non définie",
+    intervention.interventionTime || null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function applyInterventionStatus(
+  draft: InterventionDraft,
+  status: InterventionStatus
+): InterventionDraft {
+  return {
+    ...draft,
+    status,
+    photoPaths: status === "Réalisée" ? draft.photoPaths : [],
+    reportDate: status === "Reportée" ? draft.reportDate : "",
+    cancellationReason:
+      status === "Annulée" ? draft.cancellationReason : "",
+  };
+}
+
+function sanitizeInterventionDraft(
+  draft: InterventionDraft
+): InterventionDraft {
+  const next = {
+    ...draft,
+    interventionDate: draft.interventionDate,
+    interventionTime: draft.interventionTime,
+    department: draft.department.trim(),
+    address: draft.address.trim(),
+    city: draft.city.trim(),
+    prestation: draft.prestation.trim(),
+    price: parsePrice(String(draft.price ?? "")),
+    note: draft.note.trim(),
+    reportDate: draft.reportDate,
+    cancellationReason: draft.cancellationReason.trim(),
+    photoPaths: draft.photoPaths.filter(Boolean),
+  };
+
+  return applyInterventionStatus(next, next.status);
+}
+
+function validateInterventionDraft(value: InterventionDraft) {
+  if (!value.interventionDate) return "La date d’intervention est obligatoire.";
+  if (!value.interventionTime) return "L’heure est obligatoire.";
+  if (!value.department) return "Le département est obligatoire.";
+  if (!value.address) return "L’adresse est obligatoire.";
+  if (!value.city) return "La ville est obligatoire.";
+  if (!value.prestation) return "La prestation est obligatoire.";
+  if (value.price <= 0) return "Le prix doit être supérieur à 0.";
+  if (value.status === "Réalisée" && value.photoPaths.length === 0) {
+    return "Ajoutez au moins une photo pour une intervention réalisée.";
+  }
+  if (value.status === "Reportée" && !value.reportDate) {
+    return "Renseignez la nouvelle date pour une intervention reportée.";
+  }
+  if (value.status === "Annulée" && !value.cancellationReason) {
+    return "Renseignez la cause d’annulation.";
+  }
+  return "";
 }
 
 function buildTrackingTemplate(project: ManagedProject): ProjectTrackingField[] {
@@ -429,11 +499,12 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const handleAddUpdate         = (u: Omit<ProjectUpdate, "id">) => { if (!u.title.trim()) return; updateData((c) => ({ ...c, updates: [{ ...u, id: createId("update"), title: u.title.trim() }, ...c.updates] })); };
   const handleDeleteUpdate      = (id: string) => updateData((c) => ({ ...c, updates: c.updates.filter((u) => u.id !== id) }));
   const handleAddIntervention   = (intervention: Omit<ProjectIntervention, "id">) => {
-    if (!intervention.intervention.trim()) return;
+    const clean = sanitizeInterventionDraft(intervention);
+    if (!clean.prestation) return;
     updateData((c) => ({
       ...c,
       interventions: [
-        { ...intervention, id: createId("intervention"), intervention: intervention.intervention.trim() },
+        { ...clean, id: createId("intervention") },
         ...c.interventions,
       ],
     }));
@@ -441,7 +512,9 @@ export default function ProjectsManager({ currentUser: initialUser, logoutAction
   const handleUpdateIntervention = (id: string, patch: Partial<ProjectIntervention>) => updateData((c) => ({
     ...c,
     interventions: c.interventions.map((intervention) =>
-      intervention.id === id ? { ...intervention, ...patch } : intervention
+      intervention.id === id
+        ? { ...sanitizeInterventionDraft({ ...intervention, ...patch }), id }
+        : intervention
     ),
   }));
   const handleDeleteIntervention = (id: string) => updateData((c) => ({
@@ -1642,15 +1715,18 @@ function MarkdownPreview({ content }: { content: string }) {
 
 function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId }: {
   interventions: ProjectIntervention[];
-  onAdd: (intervention: Omit<ProjectIntervention, "id">) => void;
+  onAdd: (intervention: InterventionDraft) => void;
   onDelete: (id: string) => void;
   onUpdate: (id: string, patch: Partial<ProjectIntervention>) => void;
   projectId: string;
 }) {
-  const [draft, setDraft] = useState<Omit<ProjectIntervention, "id">>(() => buildBlankIntervention(projectId));
+  const [draft, setDraft] = useState<InterventionDraft>(() => buildBlankIntervention(projectId));
   const [departmentFilter, setDepartmentFilter] = useState("Tous");
   const [statusFilter, setStatusFilter] = useState<InterventionStatus | "Tous">("Tous");
   const [monthFilter, setMonthFilter] = useState("Tous");
+  const [formError, setFormError] = useState("");
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  const [editingIntervention, setEditingIntervention] = useState<ProjectIntervention | null>(null);
 
   const departmentOptions = useMemo(() =>
     Array.from(new Set(interventions.map((intervention) => intervention.department.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -1674,19 +1750,52 @@ function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId 
   );
 
   const stats = useMemo(() => {
-    const billable = interventions.filter((intervention) => intervention.status !== "Annulée");
+    const billable = interventions.filter((intervention) => intervention.status === "Réalisée");
     return {
       total: interventions.length,
       revenue: billable.reduce((sum, intervention) => sum + intervention.price, 0),
-      done: interventions.filter((intervention) => ["Réalisée", "À facturer", "Payée"].includes(intervention.status)).length,
-      toInvoice: interventions.filter((intervention) => intervention.status === "À facturer").length,
+      done: interventions.filter((intervention) => intervention.status === "Réalisée").length,
+      postponed: interventions.filter((intervention) => intervention.status === "Reportée").length,
+      cancelled: interventions.filter((intervention) => intervention.status === "Annulée").length,
     };
   }, [interventions]);
 
+  const uploadPhotos = useCallback(async (files: FileList | File[]) => {
+    const nextFiles = Array.from(files).filter((file) => file.size > 0);
+    if (!nextFiles.length) return [];
+
+    setIsUploadingPhotos(true);
+    try {
+      const formData = new FormData();
+      formData.append("projectId", projectId);
+      nextFiles.forEach((file) => formData.append("files", file));
+
+      const response = await fetch("/api/projects/interventions/upload", {
+        body: formData,
+        method: "POST",
+      });
+
+      const payload = (await response.json()) as { error?: string; paths?: string[] };
+      if (!response.ok || !payload.paths) {
+        throw new Error(payload.error || "Impossible d’envoyer les photos.");
+      }
+
+      return payload.paths;
+    } finally {
+      setIsUploadingPhotos(false);
+    }
+  }, [projectId]);
+
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!draft.intervention.trim()) return;
-    onAdd({ ...draft, projectId, intervention: draft.intervention.trim() });
+    const cleanDraft = sanitizeInterventionDraft(draft);
+    const error = validateInterventionDraft(cleanDraft);
+    if (error) {
+      setFormError(error);
+      return;
+    }
+    setFormError("");
+    onAdd({ ...cleanDraft, projectId });
     setDraft(buildBlankIntervention(projectId));
   };
 
@@ -1696,31 +1805,84 @@ function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId 
         <InterventionStat label="Total" value={String(stats.total)} />
         <InterventionStat label="CA" value={formatCurrency(stats.revenue)} />
         <InterventionStat label="Réalisées" value={String(stats.done)} />
-        <InterventionStat label="À facturer" value={String(stats.toInvoice)} danger={stats.toInvoice > 0} />
+        <InterventionStat label="Reportées" value={String(stats.postponed)} danger={stats.postponed > 0} />
       </div>
 
       <form onSubmit={submit} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm sm:p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
             <p className="text-sm font-bold text-slate-800">Nouvelle intervention</p>
-            <p className="text-xs text-slate-400">Date, zone, prestation et montant.</p>
+            <p className="text-xs text-slate-400">Date, lieu, prestation, statut et justificatifs.</p>
           </div>
-          <button type="submit" className="hidden h-9 items-center gap-1.5 rounded-xl bg-[#d9140e] px-4 text-sm font-semibold text-white transition hover:bg-[#b91010] sm:flex">
+          <button type="submit" className="hidden h-9 items-center gap-1.5 rounded-xl bg-[#d9140e] px-4 text-sm font-semibold text-white transition hover:bg-[#b91010] sm:flex" disabled={isUploadingPhotos}>
             <Plus className="h-3.5 w-3.5" /> Ajouter
           </button>
         </div>
-        <div className="grid gap-2 sm:grid-cols-[150px_110px_1fr_1fr_110px_140px]">
+        <div className="grid gap-2 sm:grid-cols-[150px_110px_110px_1.2fr_0.9fr_1.2fr_120px_150px]">
           <input type="date" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, interventionDate: e.target.value }))} value={draft.interventionDate} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Dépt." value={draft.department} />
+          <input type="time" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, interventionTime: e.target.value }))} value={draft.interventionTime} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Département" value={draft.department} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, address: e.target.value }))} placeholder="Adresse" value={draft.address} />
           <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, city: e.target.value }))} placeholder="Ville" value={draft.city} />
-          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, intervention: e.target.value }))} placeholder="Intervention" value={draft.intervention} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, prestation: e.target.value }))} placeholder="Prestation" value={draft.prestation} />
           <input type="number" min="0" step="0.01" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, price: parsePrice(e.target.value) }))} placeholder="Prix" value={draft.price || ""} />
-          <select className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, status: e.target.value as InterventionStatus }))} value={draft.status}>
+          <select className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((current) => applyInterventionStatus(current, e.target.value as InterventionStatus))} value={draft.status}>
             {INTERVENTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
           </select>
         </div>
+        {draft.status === "Reportée" && (
+          <div className="mt-2 grid gap-2 sm:grid-cols-[180px_1fr]">
+            <input type="date" className="h-10 rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm text-amber-800 outline-none focus:border-amber-400" onChange={(e) => setDraft((c) => ({ ...c, reportDate: e.target.value }))} value={draft.reportDate} />
+            <div className="flex items-center rounded-xl border border-amber-200 bg-amber-50 px-3 text-xs text-amber-700">
+              Nouvelle date obligatoire pour une intervention reportée.
+            </div>
+          </div>
+        )}
+        {draft.status === "Annulée" && (
+          <input className="mt-2 h-10 w-full rounded-xl border border-red-200 bg-red-50 px-3 text-sm text-red-700 placeholder-red-300 outline-none focus:border-red-400" onChange={(e) => setDraft((c) => ({ ...c, cancellationReason: e.target.value }))} placeholder="Cause d’annulation" value={draft.cancellationReason} />
+        )}
+        {draft.status === "Réalisée" && (
+          <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-emerald-800">Photos d’intervention</p>
+              <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-semibold text-emerald-700 shadow-sm ring-1 ring-emerald-200">
+                <Camera className="h-3.5 w-3.5" /> Ajouter des photos
+                <input
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  multiple
+                  onChange={async (e) => {
+                    if (!e.target.files?.length) return;
+                    setFormError("");
+                    try {
+                      const paths = await uploadPhotos(e.target.files);
+                      setDraft((current) => ({ ...current, photoPaths: [...current.photoPaths, ...paths] }));
+                    } catch (error) {
+                      setFormError(error instanceof Error ? error.message : "Impossible d’envoyer les photos.");
+                    } finally {
+                      e.currentTarget.value = "";
+                    }
+                  }}
+                  type="file"
+                />
+              </label>
+            </div>
+            {isUploadingPhotos && <p className="mb-2 text-xs text-emerald-700">Upload en cours…</p>}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {draft.photoPaths.map((photoPath) => (
+                <div key={photoPath} className="relative overflow-hidden rounded-xl border border-emerald-200 bg-white">
+                  <Image alt="Photo d’intervention" className="h-24 w-full object-cover" height={160} src={photoPath} unoptimized width={240} />
+                  <button type="button" onClick={() => setDraft((current) => ({ ...current, photoPaths: current.photoPaths.filter((path) => path !== photoPath) }))} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-lg bg-slate-950/60 text-white">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <textarea className="mt-2 w-full resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 placeholder-slate-400 outline-none focus:border-[#d9140e]/40" rows={2} onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Note optionnelle..." value={draft.note} />
-        <button type="submit" className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#d9140e] text-sm font-semibold text-white transition hover:bg-[#b91010] sm:hidden">
+        {formError && <p className="mt-2 text-sm font-medium text-red-600">{formError}</p>}
+        <button type="submit" className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#d9140e] text-sm font-semibold text-white transition hover:bg-[#b91010] sm:hidden" disabled={isUploadingPhotos}>
           <Plus className="h-3.5 w-3.5" /> Ajouter
         </button>
       </form>
@@ -1750,25 +1912,38 @@ function InterventionsTab({ interventions, onAdd, onDelete, onUpdate, projectId 
       </div>
 
       <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:block">
-        <div className="grid grid-cols-[130px_100px_1fr_1.5fr_110px_130px_1.5fr_70px] bg-slate-50/80 px-5 py-2.5">
-          {["Date", "Dépt.", "Ville", "Intervention", "Prix", "Statut", "Note", ""].map((header) => (
+        <div className="overflow-x-auto">
+        <div className="min-w-[1280px]">
+        <div className="grid grid-cols-[120px_90px_90px_1.2fr_0.9fr_1.2fr_110px_130px_1.5fr_80px] bg-slate-50/80 px-5 py-2.5">
+          {["Date", "Heure", "Dépt.", "Adresse", "Ville", "Prestation", "Prix", "Statut", "Note", ""].map((header) => (
             <div key={header} className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{header}</div>
           ))}
         </div>
         <div className="divide-y divide-slate-100">
           {filteredInterventions.map((intervention) => (
-            <InterventionTableRow key={intervention.id} intervention={intervention} onDelete={onDelete} onUpdate={onUpdate} />
+            <InterventionTableRow key={intervention.id} intervention={intervention} onDelete={onDelete} onEdit={setEditingIntervention} />
           ))}
+        </div>
+        </div>
         </div>
       </div>
 
       <div className="space-y-2 md:hidden">
         {filteredInterventions.map((intervention) => (
-          <InterventionMobileCard key={intervention.id} intervention={intervention} onDelete={onDelete} onUpdate={onUpdate} />
+          <InterventionMobileCard key={intervention.id} intervention={intervention} onDelete={onDelete} onEdit={setEditingIntervention} />
         ))}
       </div>
 
       {!filteredInterventions.length && <EmptyState label="Aucune intervention pour ces filtres." small />}
+
+      {editingIntervention && (
+        <InterventionEditor
+          intervention={editingIntervention}
+          onClose={() => setEditingIntervention(null)}
+          onSave={(patch) => onUpdate(editingIntervention.id, patch)}
+          onUploadPhotos={uploadPhotos}
+        />
+      )}
     </div>
   );
 }
@@ -1782,35 +1957,44 @@ function InterventionStat({ danger, label, value }: { danger?: boolean; label: s
   );
 }
 
-function InterventionTableRow({ intervention, onDelete, onUpdate }: {
+function InterventionTableRow({ intervention, onDelete, onEdit }: {
   intervention: ProjectIntervention;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, patch: Partial<ProjectIntervention>) => void;
+  onEdit: (intervention: ProjectIntervention) => void;
 }) {
   const meta = INTERVENTION_META[intervention.status];
 
   return (
-    <div className="grid grid-cols-[130px_100px_1fr_1.5fr_110px_130px_1.5fr_70px] items-center px-5 py-3">
-      <input type="date" className="h-8 rounded-lg border border-transparent bg-transparent text-sm text-slate-600 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { interventionDate: e.target.value })} value={intervention.interventionDate} />
-      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm font-semibold text-slate-700 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { department: e.target.value })} value={intervention.department} />
-      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm text-slate-600 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { city: e.target.value })} value={intervention.city} />
-      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm font-semibold text-slate-800 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { intervention: e.target.value })} value={intervention.intervention} />
-      <input type="number" min="0" step="0.01" className="h-8 w-24 rounded-lg border border-transparent bg-transparent text-sm font-semibold text-slate-700 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { price: parsePrice(e.target.value) })} value={intervention.price || ""} />
-      <select className={`h-7 rounded-full border-0 px-3 text-xs font-semibold outline-none ${meta.cls}`} style={{ appearance: "none" }} onChange={(e) => onUpdate(intervention.id, { status: e.target.value as InterventionStatus })} value={intervention.status}>
-        {INTERVENTION_STATUSES.map((status) => <option key={status} value={status} className="bg-white text-slate-800">{status}</option>)}
-      </select>
-      <input className="h-8 min-w-0 rounded-lg border border-transparent bg-transparent text-sm text-slate-500 outline-none focus:border-slate-200 focus:bg-white focus:px-2" onChange={(e) => onUpdate(intervention.id, { note: e.target.value })} value={intervention.note} />
-      <button onClick={() => onDelete(intervention.id)} type="button" className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500">
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
+    <div className="grid grid-cols-[120px_90px_90px_1.2fr_0.9fr_1.2fr_110px_130px_1.5fr_80px] items-center px-5 py-3">
+      <div className="text-sm text-slate-600">{intervention.interventionDate || "—"}</div>
+      <div className="text-sm text-slate-600">{intervention.interventionTime || "—"}</div>
+      <div className="text-sm font-semibold text-slate-700">{intervention.department || "—"}</div>
+      <div className="truncate text-sm text-slate-600">{intervention.address || "—"}</div>
+      <div className="truncate text-sm text-slate-600">{intervention.city || "—"}</div>
+      <div className="truncate text-sm font-semibold text-slate-800">{intervention.prestation}</div>
+      <div className="text-sm font-semibold text-slate-700">{formatCurrency(intervention.price)}</div>
+      <div>
+        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${meta.cls}`}>{intervention.status}</span>
+      </div>
+      <div className="min-w-0 pr-3">
+        <p className="line-clamp-2 text-xs leading-relaxed text-slate-500">{buildInterventionMetaLine(intervention)}</p>
+      </div>
+      <div className="flex items-center justify-end gap-1">
+        <button onClick={() => onEdit(intervention)} type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-slate-100 hover:text-slate-600">
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button onClick={() => onDelete(intervention.id)} type="button" className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 transition hover:bg-red-50 hover:text-red-500">
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
 
-function InterventionMobileCard({ intervention, onDelete, onUpdate }: {
+function InterventionMobileCard({ intervention, onDelete, onEdit }: {
   intervention: ProjectIntervention;
   onDelete: (id: string) => void;
-  onUpdate: (id: string, patch: Partial<ProjectIntervention>) => void;
+  onEdit: (intervention: ProjectIntervention) => void;
 }) {
   const meta = INTERVENTION_META[intervention.status];
 
@@ -1820,26 +2004,161 @@ function InterventionMobileCard({ intervention, onDelete, onUpdate }: {
         <div className="min-w-0">
           <div className="mb-1.5 flex items-center gap-2">
             <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
-            <p className="truncate text-sm font-bold text-slate-900">{intervention.intervention}</p>
+            <p className="truncate text-sm font-bold text-slate-900">{intervention.prestation}</p>
           </div>
-          <p className="text-xs text-slate-400">{intervention.interventionDate || "Date non définie"} · {intervention.department || "Dépt. non défini"}{intervention.city ? ` · ${intervention.city}` : ""}</p>
+          <p className="text-xs text-slate-400">{formatInterventionDateTime(intervention)}</p>
         </div>
-        <button onClick={() => onDelete(intervention.id)} type="button" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500">
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${meta.cls}`}>{intervention.status}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <MobileTaskMeta label="Département" value={intervention.department || "—"} />
+        <MobileTaskMeta label="Ville" value={intervention.city || "—"} />
+        <MobileTaskMeta className="col-span-2" label="Adresse" value={intervention.address || "—"} />
+        <MobileTaskMeta label="Prix" value={formatCurrency(intervention.price)} />
+        <MobileTaskMeta label="Photos" value={String(intervention.photoPaths.length)} />
+      </div>
+      <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Détails</p>
+        <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-600">{buildInterventionMetaLine(intervention)}</p>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <button onClick={() => onEdit(intervention)} type="button" className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600">
+          <Pencil className="h-3.5 w-3.5" /> Modifier
+        </button>
+        <button onClick={() => onDelete(intervention.id)} type="button" className="flex h-9 w-11 items-center justify-center rounded-xl border border-red-100 text-red-500">
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <input type="date" className="h-9 rounded-xl border border-slate-200 px-2 text-xs text-slate-600 outline-none" onChange={(e) => onUpdate(intervention.id, { interventionDate: e.target.value })} value={intervention.interventionDate} />
-        <input className="h-9 rounded-xl border border-slate-200 px-2 text-xs text-slate-600 outline-none" onChange={(e) => onUpdate(intervention.id, { department: e.target.value })} placeholder="Département" value={intervention.department} />
-        <input className="h-9 rounded-xl border border-slate-200 px-2 text-xs text-slate-600 outline-none" onChange={(e) => onUpdate(intervention.id, { city: e.target.value })} placeholder="Ville" value={intervention.city} />
-        <input type="number" min="0" step="0.01" className="h-9 rounded-xl border border-slate-200 px-2 text-xs font-semibold text-slate-700 outline-none" onChange={(e) => onUpdate(intervention.id, { price: parsePrice(e.target.value) })} value={intervention.price || ""} />
-        <input className="col-span-2 h-9 rounded-xl border border-slate-200 px-2 text-xs font-semibold text-slate-800 outline-none" onChange={(e) => onUpdate(intervention.id, { intervention: e.target.value })} value={intervention.intervention} />
-        <select className={`col-span-2 h-9 rounded-xl border border-slate-200 px-2 text-xs font-semibold outline-none ${meta.cls}`} onChange={(e) => onUpdate(intervention.id, { status: e.target.value as InterventionStatus })} value={intervention.status}>
-          {INTERVENTION_STATUSES.map((status) => <option key={status} value={status} className="bg-white text-slate-800">{status}</option>)}
-        </select>
-        <textarea className="col-span-2 resize-none rounded-xl border border-slate-200 p-2 text-xs text-slate-600 outline-none" rows={2} onChange={(e) => onUpdate(intervention.id, { note: e.target.value })} placeholder="Note" value={intervention.note} />
-      </div>
     </article>
+  );
+}
+
+function buildInterventionMetaLine(intervention: ProjectIntervention) {
+  const details = [];
+
+  if (intervention.note.trim()) details.push(intervention.note.trim());
+  if (intervention.status === "Reportée" && intervention.reportDate) details.push(`Nouvelle date : ${intervention.reportDate}`);
+  if (intervention.status === "Annulée" && intervention.cancellationReason.trim()) details.push(`Cause : ${intervention.cancellationReason.trim()}`);
+  if (intervention.status === "Réalisée" && intervention.photoPaths.length > 0) details.push(`${intervention.photoPaths.length} photo${intervention.photoPaths.length > 1 ? "s" : ""}`);
+
+  return details.join(" · ") || "—";
+}
+
+function InterventionEditor({ intervention, onClose, onSave, onUploadPhotos }: {
+  intervention: ProjectIntervention;
+  onClose: () => void;
+  onSave: (patch: Partial<ProjectIntervention>) => void;
+  onUploadPhotos: (files: FileList | File[]) => Promise<string[]>;
+}) {
+  const [draft, setDraft] = useState<InterventionDraft>({
+    projectId: intervention.projectId,
+    interventionDate: intervention.interventionDate,
+    interventionTime: intervention.interventionTime,
+    department: intervention.department,
+    address: intervention.address,
+    city: intervention.city,
+    prestation: intervention.prestation,
+    price: intervention.price,
+    status: intervention.status,
+    reportDate: intervention.reportDate,
+    cancellationReason: intervention.cancellationReason,
+    photoPaths: intervention.photoPaths,
+    note: intervention.note,
+  });
+  const [error, setError] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const cleanDraft = sanitizeInterventionDraft(draft);
+    const validationError = validateInterventionDraft(cleanDraft);
+    if (validationError) return setError(validationError);
+    setError("");
+    onSave(cleanDraft);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4">
+      <div className="flex max-h-[calc(100dvh-1rem)] w-full max-w-[760px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/5 sm:max-h-[calc(100dvh-2rem)]">
+        <div className="shrink-0 border-b border-slate-100 px-4 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Modifier l’intervention</h2>
+              <p className="mt-0.5 text-xs text-slate-400">Mettez à jour les détails, le statut et les preuves.</p>
+            </div>
+            <button onClick={onClose} type="button" className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <form onSubmit={submit} className="grid gap-3 overflow-y-auto px-4 py-4 sm:grid-cols-2 sm:gap-4 sm:px-6">
+          <input type="date" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-1" onChange={(e) => setDraft((c) => ({ ...c, interventionDate: e.target.value }))} value={draft.interventionDate} />
+          <input type="time" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-1" onChange={(e) => setDraft((c) => ({ ...c, interventionTime: e.target.value }))} value={draft.interventionTime} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, department: e.target.value }))} placeholder="Département" value={draft.department} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, city: e.target.value }))} placeholder="Ville" value={draft.city} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, address: e.target.value }))} placeholder="Adresse" value={draft.address} />
+          <input className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40 sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, prestation: e.target.value }))} placeholder="Prestation" value={draft.prestation} />
+          <input type="number" min="0" step="0.01" className="h-10 rounded-xl border border-slate-200 px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((c) => ({ ...c, price: parsePrice(e.target.value) }))} placeholder="Prix" value={draft.price || ""} />
+          <select className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[#d9140e]/40" onChange={(e) => setDraft((current) => applyInterventionStatus(current, e.target.value as InterventionStatus))} value={draft.status}>
+            {INTERVENTION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+          </select>
+          {draft.status === "Reportée" && (
+            <input type="date" className="h-10 rounded-xl border border-amber-200 bg-amber-50 px-3 text-sm text-amber-800 outline-none sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, reportDate: e.target.value }))} value={draft.reportDate} />
+          )}
+          {draft.status === "Annulée" && (
+            <input className="h-10 rounded-xl border border-red-200 bg-red-50 px-3 text-sm text-red-700 outline-none sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, cancellationReason: e.target.value }))} placeholder="Cause d’annulation" value={draft.cancellationReason} />
+          )}
+          {draft.status === "Réalisée" && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 sm:col-span-2">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-emerald-800">Photos d’intervention</p>
+                <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-xl bg-white px-3 text-xs font-semibold text-emerald-700 shadow-sm ring-1 ring-emerald-200">
+                  <Camera className="h-3.5 w-3.5" /> Ajouter
+                  <input
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    multiple
+                    onChange={async (e) => {
+                      if (!e.target.files?.length) return;
+                      setError("");
+                      setIsUploading(true);
+                      try {
+                        const paths = await onUploadPhotos(e.target.files);
+                        setDraft((current) => ({ ...current, photoPaths: [...current.photoPaths, ...paths] }));
+                      } catch (uploadError) {
+                        setError(uploadError instanceof Error ? uploadError.message : "Impossible d’envoyer les photos.");
+                      } finally {
+                        setIsUploading(false);
+                        e.currentTarget.value = "";
+                      }
+                    }}
+                    type="file"
+                  />
+                </label>
+              </div>
+              {isUploading && <p className="mb-2 text-xs text-emerald-700">Upload en cours…</p>}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {draft.photoPaths.map((photoPath) => (
+                  <div key={photoPath} className="relative overflow-hidden rounded-xl border border-emerald-200 bg-white">
+                    <Image alt="Photo d’intervention" className="h-24 w-full object-cover" height={160} src={photoPath} unoptimized width={240} />
+                    <button type="button" onClick={() => setDraft((current) => ({ ...current, photoPaths: current.photoPaths.filter((path) => path !== photoPath) }))} className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-lg bg-slate-950/60 text-white">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <textarea className="min-h-[96px] resize-none rounded-xl border border-slate-200 p-3 text-sm text-slate-700 outline-none sm:col-span-2" onChange={(e) => setDraft((c) => ({ ...c, note: e.target.value }))} placeholder="Note" value={draft.note} />
+          {error && <p className="text-sm font-medium text-red-600 sm:col-span-2">{error}</p>}
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:static sm:col-span-2 sm:m-0 sm:flex-row sm:justify-end sm:border-t-0 sm:bg-transparent sm:p-0">
+            <button onClick={onClose} type="button" className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-semibold text-slate-600 hover:bg-slate-50">Annuler</button>
+            <button type="submit" className="h-10 rounded-xl bg-[#d9140e] px-6 text-sm font-semibold text-white shadow-sm shadow-red-900/20 hover:bg-[#b91010]" disabled={isUploading}>Enregistrer</button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 

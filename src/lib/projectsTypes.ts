@@ -33,8 +33,6 @@ export const INTERVENTION_STATUSES = [
   "Réalisée",
   "Reportée",
   "Annulée",
-  "À facturer",
-  "Payée",
 ] as const;
 
 export const PROJECT_USER_ROLES = ["super_admin", "member"] as const;
@@ -122,11 +120,16 @@ export interface ProjectIntervention {
   id: string;
   projectId: string;
   interventionDate: string;
+  interventionTime: string;
   department: string;
+  address: string;
   city: string;
-  intervention: string;
+  prestation: string;
   price: number;
   status: InterventionStatus;
+  reportDate: string;
+  cancellationReason: string;
+  photoPaths: string[];
   note: string;
 }
 

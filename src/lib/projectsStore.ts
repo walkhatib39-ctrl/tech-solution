@@ -470,17 +470,17 @@ function normalizeIntervention(
     !intervention ||
     typeof intervention.projectId !== "string" ||
     !intervention.projectId.trim() ||
-    typeof intervention.intervention !== "string" ||
-    !intervention.intervention.trim()
+    typeof intervention.prestation !== "string" ||
+    !intervention.prestation.trim()
   ) {
     return null;
   }
 
   const status = INTERVENTION_STATUSES.includes(
-    intervention.status ?? "Réalisée"
+    intervention.status ?? "Prévue"
   )
-    ? intervention.status ?? "Réalisée"
-    : "Réalisée";
+    ? intervention.status ?? "Prévue"
+    : "Prévue";
 
   return {
     id:
@@ -492,16 +492,35 @@ function normalizeIntervention(
       typeof intervention.interventionDate === "string"
         ? intervention.interventionDate
         : "",
+    interventionTime:
+      typeof intervention.interventionTime === "string"
+        ? intervention.interventionTime
+        : "",
     department:
       typeof intervention.department === "string"
         ? intervention.department.trim()
         : "",
+    address:
+      typeof intervention.address === "string"
+        ? intervention.address.trim()
+        : "",
     city:
       typeof intervention.city === "string" ? intervention.city.trim() : "",
-    intervention: intervention.intervention.trim(),
+    prestation: intervention.prestation.trim(),
     price: normalizePrice(intervention.price),
     status,
-    note: typeof intervention.note === "string" ? intervention.note : "",
+    reportDate:
+      typeof intervention.reportDate === "string" ? intervention.reportDate : "",
+    cancellationReason:
+      typeof intervention.cancellationReason === "string"
+        ? intervention.cancellationReason.trim()
+        : "",
+    photoPaths: Array.isArray(intervention.photoPaths)
+      ? intervention.photoPaths
+          .filter((path): path is string => typeof path === "string" && path.trim().length > 0)
+          .map((path) => path.trim())
+      : [],
+    note: typeof intervention.note === "string" ? intervention.note.trim() : "",
   };
 }
 
@@ -916,11 +935,16 @@ async function ensureProjectsSchema() {
         id VARCHAR(120) NOT NULL PRIMARY KEY,
         project_id VARCHAR(120) NOT NULL,
         intervention_date DATE NULL,
+        intervention_time VARCHAR(10) NULL,
         department VARCHAR(80) NULL,
+        address VARCHAR(255) NULL,
         city VARCHAR(190) NULL,
-        intervention VARCHAR(255) NOT NULL,
+        prestation VARCHAR(255) NULL,
         price DECIMAL(10,2) NOT NULL DEFAULT 0,
         status VARCHAR(40) NOT NULL,
+        report_date DATE NULL,
+        cancellation_reason TEXT NULL,
+        photo_paths_json LONGTEXT NULL,
         note TEXT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -931,6 +955,66 @@ async function ensureProjectsSchema() {
           ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    const [interventionColumnRows] = await pool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'project_interventions'`
+    );
+    const interventionColumns = new Set(
+      interventionColumnRows.map((row) => String(row.COLUMN_NAME))
+    );
+
+    if (!interventionColumns.has("intervention_time")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN intervention_time VARCHAR(10) NULL AFTER intervention_date
+      `);
+    }
+
+    if (!interventionColumns.has("address")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN address VARCHAR(255) NULL AFTER department
+      `);
+    }
+
+    if (!interventionColumns.has("prestation")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN prestation VARCHAR(255) NULL AFTER city
+      `);
+
+      if (interventionColumns.has("intervention")) {
+        await pool.query(`
+          UPDATE project_interventions
+          SET prestation = intervention
+          WHERE prestation IS NULL OR prestation = ''
+        `);
+      }
+    }
+
+    if (!interventionColumns.has("report_date")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN report_date DATE NULL AFTER status
+      `);
+    }
+
+    if (!interventionColumns.has("cancellation_reason")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN cancellation_reason TEXT NULL AFTER report_date
+      `);
+    }
+
+    if (!interventionColumns.has("photo_paths_json")) {
+      await pool.query(`
+        ALTER TABLE project_interventions
+          ADD COLUMN photo_paths_json LONGTEXT NULL AFTER cancellation_reason
+      `);
+    }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS project_access (
@@ -1176,17 +1260,22 @@ async function saveProjectsDataWithoutSchema(
   for (const intervention of data.interventions) {
     await queryable.execute(
       `INSERT INTO project_interventions
-        (id, project_id, intervention_date, department, city, intervention, price, status, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, intervention_date, intervention_time, department, address, city, prestation, price, status, report_date, cancellation_reason, photo_paths_json, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         intervention.id,
         intervention.projectId,
         toNullableDate(intervention.interventionDate),
+        intervention.interventionTime || null,
         intervention.department,
+        intervention.address,
         intervention.city,
-        intervention.intervention,
+        intervention.prestation,
         intervention.price,
         intervention.status,
+        toNullableDate(intervention.reportDate),
+        intervention.cancellationReason,
+        JSON.stringify(intervention.photoPaths),
         intervention.note,
       ]
     );
@@ -1287,11 +1376,16 @@ export async function getProjectsData(): Promise<ProjectsData> {
       id,
       project_id AS projectId,
       intervention_date AS interventionDate,
+      intervention_time AS interventionTime,
       department,
+      address,
       city,
-      intervention,
+      prestation,
       price,
       status,
+      report_date AS reportDate,
+      cancellation_reason AS cancellationReason,
+      photo_paths_json AS photoPathsJson,
       note
      FROM project_interventions
      ORDER BY intervention_date DESC, created_at DESC`
@@ -1383,11 +1477,25 @@ export async function getProjectsData(): Promise<ProjectsData> {
       id: String(row.id),
       projectId: String(row.projectId),
       interventionDate: fromDate(row.interventionDate),
+      interventionTime: String(row.interventionTime ?? ""),
       department: String(row.department ?? ""),
+      address: String(row.address ?? ""),
       city: String(row.city ?? ""),
-      intervention: String(row.intervention),
+      prestation: String(row.prestation ?? ""),
       price: normalizePrice(row.price),
       status: row.status,
+      reportDate: fromDate(row.reportDate),
+      cancellationReason: String(row.cancellationReason ?? ""),
+      photoPaths: (() => {
+        try {
+          const parsed = JSON.parse(String(row.photoPathsJson ?? "[]"));
+          return Array.isArray(parsed)
+            ? parsed.filter((path): path is string => typeof path === "string")
+            : [];
+        } catch {
+          return [];
+        }
+      })(),
       note: String(row.note ?? ""),
     })),
     teamUsers: userRows.map((row) => ({
