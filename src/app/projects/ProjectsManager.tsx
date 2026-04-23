@@ -2370,6 +2370,27 @@ function isPdfDocFile(file: ProjectDocFile) {
   return file.sourceType === "upload" && file.mimeType === "application/pdf";
 }
 
+function getDocAssetUrl(
+  file: ProjectDocFile,
+  options?: { download?: boolean }
+) {
+  if (!file.assetPath) {
+    return "";
+  }
+
+  const searchParams = new URLSearchParams({
+    name: file.title,
+    path: file.assetPath,
+    projectId: file.projectId,
+  });
+
+  if (options?.download) {
+    searchParams.set("download", "1");
+  }
+
+  return `/api/projects/docs/file?${searchParams.toString()}`;
+}
+
 function getDocFileTypeLabel(file: ProjectDocFile) {
   if (isMarkdownDocFile(file)) return "MD";
   if (file.mimeType === "application/pdf") return "PDF";
@@ -2483,6 +2504,14 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
   const createdAtLabel = selectedFile ? formatProjectDateTime(selectedFile.createdAt) : "";
   const updatedAtLabel = selectedFile ? formatProjectDateTime(selectedFile.updatedAt) : "";
   const canEditSelectedFile = Boolean(selectedFile && isMarkdownDocFile(selectedFile));
+  const selectedFileAssetUrl =
+    selectedFile && !isMarkdownDocFile(selectedFile)
+      ? getDocAssetUrl(selectedFile)
+      : "";
+  const selectedFileDownloadUrl =
+    selectedFile && !isMarkdownDocFile(selectedFile)
+      ? getDocAssetUrl(selectedFile, { download: true })
+      : "";
 
   const openUploadPicker = (folderId: string | null) => {
     setUploadTargetFolderId(folderId);
@@ -2858,11 +2887,11 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                         >
                           {viewMode === "edit" ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                         </button>
-                      ) : selectedFile.assetPath ? (
+                      ) : selectedFileAssetUrl ? (
                         <>
                           <a
                             className="projects-btn-secondary inline-flex h-9 w-9 items-center justify-center"
-                            href={selectedFile.assetPath}
+                            href={selectedFileAssetUrl}
                             rel="noreferrer"
                             title="Ouvrir"
                             target="_blank"
@@ -2872,7 +2901,7 @@ function DocsTab({ files, folders, onAddFile, onAddFolder, onDeleteFile, onDelet
                           <a
                             className="projects-btn-secondary inline-flex h-9 w-9 items-center justify-center"
                             download
-                            href={selectedFile.assetPath}
+                            href={selectedFileDownloadUrl}
                             title="Télécharger"
                           >
                             <Download className="h-4 w-4" />
@@ -3076,6 +3105,9 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
     );
   }
 
+  const fileUrl = getDocAssetUrl(file);
+  const downloadUrl = getDocAssetUrl(file, { download: true });
+
   if (isImageDocFile(file)) {
     return (
       <div className="space-y-3">
@@ -3088,7 +3120,7 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
           </div>
           <a
             className="projects-btn-secondary inline-flex h-9 items-center gap-2 px-3 text-[12px] font-semibold"
-            href={file.assetPath}
+            href={fileUrl}
             rel="noreferrer"
             target="_blank"
           >
@@ -3102,7 +3134,8 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
               alt={file.title}
               className="object-contain"
               fill
-              src={file.assetPath}
+              src={fileUrl}
+              unoptimized
             />
           </div>
         </div>
@@ -3123,7 +3156,7 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
           <div className="flex items-center gap-2">
             <a
               className="projects-btn-secondary inline-flex h-9 items-center gap-2 px-3 text-[12px] font-semibold"
-              href={file.assetPath}
+              href={fileUrl}
               rel="noreferrer"
               target="_blank"
             >
@@ -3133,7 +3166,7 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
             <a
               className="projects-btn-secondary inline-flex h-9 w-9 items-center justify-center"
               download
-              href={file.assetPath}
+              href={downloadUrl}
               title="Télécharger"
             >
               <Download className="h-4 w-4" />
@@ -3143,7 +3176,7 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
         <div className="overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
           <iframe
             className="h-[62vh] min-h-[420px] w-full"
-            src={`${file.assetPath}#toolbar=0`}
+            src={`${fileUrl}#toolbar=0`}
             title={file.title}
           />
         </div>
@@ -3170,7 +3203,7 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <a
           className="projects-btn-primary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
-          href={file.assetPath}
+          href={fileUrl}
           rel="noreferrer"
           target="_blank"
         >
@@ -3180,7 +3213,7 @@ function UploadedDocPreview({ file }: { file: ProjectDocFile }) {
         <a
           className="projects-btn-secondary inline-flex h-10 items-center gap-2 px-3 text-[12px] font-semibold"
           download
-          href={file.assetPath}
+          href={downloadUrl}
         >
           <Download className="h-4 w-4" />
           <span>Télécharger</span>
