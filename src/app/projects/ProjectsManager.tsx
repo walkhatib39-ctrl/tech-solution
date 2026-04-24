@@ -5338,15 +5338,45 @@ function NativePickerField({
   type: "date" | "time";
   value: string;
 }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const displayValue =
     type === "date"
       ? value
         ? formatTaskInputDate(value)
         : placeholder
       : value || placeholder;
+  const openPicker = useCallback(() => {
+    const input = inputRef.current;
+
+    if (!input) {
+      return;
+    }
+
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  }, []);
 
   return (
-    <label className={TASK_EDITOR_PICKER_FIELD_CLASS}>
+    <label
+      className={`${TASK_EDITOR_PICKER_FIELD_CLASS} cursor-pointer`}
+      onClick={(event) => {
+        event.preventDefault();
+        openPicker();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openPicker();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
       <span className="shrink-0 text-[var(--tsp-text-secondary)]">{icon}</span>
       <span
         className={`min-w-0 flex-1 truncate ${
@@ -5357,8 +5387,9 @@ function NativePickerField({
       </span>
       <ChevronDown className="h-4 w-4 shrink-0 text-[var(--tsp-text-secondary)]" />
       <input
-        className="absolute inset-0 cursor-pointer opacity-0"
+        className="absolute inset-0 opacity-0"
         onChange={(event) => onChange(event.target.value)}
+        ref={inputRef}
         type={type}
         value={value}
       />
@@ -5388,7 +5419,7 @@ function TaskAttachmentCard({
     <div className="projects-surface-soft flex items-center gap-3 px-3 py-3">
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-[10px] border border-[var(--tsp-border)] bg-white">
         {isImage && previewSrc ? (
-          <Image alt={attachment.name} className="object-cover" fill sizes="48px" src={previewSrc} />
+          <Image alt={attachment.name} className="object-cover" fill sizes="48px" src={previewSrc} unoptimized />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[var(--tsp-text-secondary)]">
             <FileText className="h-5 w-5" />
