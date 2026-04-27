@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "seed:maison216": "node scripts/seed-maison216.js",
     "lint": "eslint"
   },
   "dependencies": {
