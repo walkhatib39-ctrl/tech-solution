@@ -138,13 +138,57 @@ Never paste the private key into chat or commit it.
 
 The local key must be added once to `/home/debian/.ssh/authorized_keys` on the VPS.
 
-Run this from local PowerShell:
+Use one of the two methods below.
+
+#### Method A: from local Windows PowerShell
+
+Use this when the prompt looks like:
+
+```text
+PS C:\Users\WALID DEV>
+```
+
+Run this from local PowerShell, not from the VPS SSH shell:
 
 ```powershell
 Get-Content "$env:USERPROFILE\.ssh\techsolution_ovh.pub" | ssh debian@37.59.96.235 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
 ```
 
 This asks for the VPS password once.
+
+If the prompt looks like this, you are already inside the VPS and this PowerShell command will not work:
+
+```text
+debian@vps-657d78f8:~$
+```
+
+The symptom is:
+
+```text
+-bash: Get-Content: command not found
+```
+
+That means the key was not installed.
+
+#### Method B: if already connected to the VPS
+
+Use this only when the prompt looks like:
+
+```text
+debian@vps-657d78f8:~$
+```
+
+From local Windows, first display the public key:
+
+```powershell
+Get-Content "$env:USERPROFILE\.ssh\techsolution_ovh.pub"
+```
+
+Then copy the single `ssh-ed25519 ... techsolution-ovh-codex` line and paste it into this VPS command by replacing `PASTE_PUBLIC_KEY_HERE`:
+
+```bash
+mkdir -p ~/.ssh && printf '%s\n' 'PASTE_PUBLIC_KEY_HERE' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+```
 
 After authorization, test key-based access:
 
