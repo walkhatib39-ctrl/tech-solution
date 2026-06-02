@@ -108,6 +108,18 @@ Verified production facts from previous deployment work:
 - `.env.production` exists in `/var/www/vhosts/techsolution-group.com/httpdocs`
 - the app uses MySQL through `mysql2`
 
+Verified on 2026-06-02:
+
+- SSH key alias `techsolution-ovh` works from the local Codex machine
+- `hostname` returns `vps-657d78f8`
+- `whoami` returns `debian`
+- `sudo -n true` succeeds
+- Plesk Git repository name is `tech-solution`
+- Plesk Git repository type is `pull`
+- Plesk bare repository path is `/var/www/vhosts/techsolution-group.com/git/tech-solution`
+- Plesk Node environment reports Node `v25.9.0` and npm `11.12.1` when commands run through `sudo -u techsolution-group.co_lufiimcupx bash -lc`
+- running Node without the Plesk login environment may resolve to a different system Node version, so keep the `bash -lc` wrapper in production commands
+
 ## 4. SSH Access
 
 Local SSH private key path:
@@ -308,8 +320,10 @@ ssh techsolution-ovh "sudo git --git-dir=/var/www/vhosts/techsolution-group.com/
 Expected repo:
 
 ```text
-https://github.com/walkhatib39-ctrl/tech-solution
+https://walkhatib39-ctrl@github.com/walkhatib39-ctrl/tech-solution
 ```
+
+The username in the HTTPS remote is how Plesk currently stores this public GitHub pull remote.
 
 ## 8. Standard Deployment Flow
 
@@ -398,6 +412,14 @@ ssh techsolution-ovh "sudo -u techsolution-group.co_lufiimcupx bash -lc 'cd /var
 
 If a seed script is missing in production, production code is stale. Deploy the latest GitHub commit first.
 
+Verified seed state on 2026-06-02:
+
+- `npm run seed:azur` exists after deploying commit `f8a3d59`
+- running it in production completed for project `project-1e562d87-8d0c-492b-88a0-a59ebeb1390e`
+- result: 23 sections ready, 44 tasks inserted, 0 tasks skipped
+- database counts after seed: 23 sections, 44 tasks
+- status split after seed: 24 `Terminé`, 3 `En cours`, 3 `Bloqué`, 14 `À faire`
+
 ## 11. Deployment Verification
 
 HTTP smoke:
@@ -436,6 +458,14 @@ Check project counts:
 ```powershell
 ssh techsolution-ovh "sudo -u techsolution-group.co_lufiimcupx bash -lc 'cd /var/www/vhosts/techsolution-group.com/httpdocs && set -a && . ./.env.production && set +a && node -e \"const mysql=require(\\\"mysql2/promise\\\"); mysql.createConnection({host:process.env.DB_HOST,port:Number(process.env.DB_PORT||3306),user:process.env.DB_USER,password:process.env.DB_PASSWORD||\\\"\\\",database:process.env.DB_NAME}).then(async c=>{const [r]=await c.query(\\\"SELECT name, (SELECT COUNT(*) FROM tasks WHERE tasks.project_id=projects.id) tasks FROM projects ORDER BY name\\\"); console.table(r); await c.end();})\"'"
 ```
+
+Before deployment, if production has runtime uploads, make a non-destructive backup:
+
+```powershell
+ssh techsolution-ovh "sudo -u techsolution-group.co_lufiimcupx bash -lc 'cd /var/www/vhosts/techsolution-group.com/httpdocs && mkdir -p data/backups && if [ -d public/uploads ]; then tar -czf data/backups/uploads-before-deploy-$(date +%Y%m%d-%H%M%S).tgz public/uploads; fi'"
+```
+
+This was used on 2026-06-02 before deploying commit `f8a3d59`; production had 74 files under `public/uploads`, and the count remained 74 after deployment.
 
 ## 12. Production Safety Rules
 
