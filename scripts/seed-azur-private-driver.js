@@ -10,22 +10,16 @@ const CREATED_BY = "Walid";
 const DEFAULT_RESPONSIBLE = "Walid";
 
 const SECTION_COLORS = [
-  "#0f1e35",
   "#2563eb",
   "#16a34a",
-  "#d97706",
-  "#dc2626",
-  "#6d5dfc",
-  "#0891b2",
-  "#be123c",
-  "#0f9f6e",
-  "#92400e",
-  "#1d4ed8",
-  "#5a6a7e",
 ];
 
 const SECTION_NAMES = [
-  "Stratégie",
+  "Site web",
+  "SEO & Marketing",
+];
+
+const SITE_WEB_SECTIONS = new Set([
   "Technique",
   "Homepage",
   "Flotte",
@@ -33,22 +27,16 @@ const SECTION_NAMES = [
   "UI/UX",
   "Navigation",
   "Pages",
-  "SEO technique",
-  "SEO local",
   "Documentation",
-  "SEO indexation",
   "Formulaires",
   "CRM léger",
-  "SEO contenu",
-  "Conversion",
-  "Réputation",
   "Performance",
-  "Contenu",
-  "Assets",
-  "Google Business Profile",
   "Email domaine",
-  "Données business",
-];
+]);
+
+function classifySection(sectionName) {
+  return SITE_WEB_SECTIONS.has(sectionName) ? "Site web" : "SEO & Marketing";
+}
 
 const RAW_TASKS = `
 Terminé | Haute | Stratégie | Cadrage positionnement premium | Définir Azur Private Driver comme machine d’acquisition VTC premium : Nice Airport, Monaco, Cannes, Saint-Tropez, WhatsApp, prix fixe. | 2026-05-20 | 2026-05-21
@@ -150,7 +138,7 @@ function parseTasks() {
       note,
       priority,
       responsible: DEFAULT_RESPONSIBLE,
-      section,
+      section: classifySection(section),
       startDate,
       status,
       title,
