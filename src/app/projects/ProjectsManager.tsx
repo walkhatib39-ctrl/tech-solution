@@ -2143,10 +2143,10 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
   onEditTask: (t: ManagedTask) => void;
   onPreviewTask: (t: ManagedTask) => void;
 }) {
-  const [openSectionIds, setOpenSectionIds] = useState<Set<string>>(new Set());
+  const [closedSectionIds, setClosedSectionIds] = useState<Set<string>>(new Set());
 
   const toggleSection = (id: string) => {
-    setOpenSectionIds((current) => {
+    setClosedSectionIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -2166,7 +2166,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
     <div className="divide-y divide-slate-100 md:hidden">
       {groups.map((group) => {
         const groupKey = group.id ?? "unclassified";
-        const isOpen = openSectionIds.has(groupKey);
+        const isOpen = !closedSectionIds.has(groupKey);
 
         return (
           <div key={groupKey}>
@@ -2206,7 +2206,7 @@ function TachesTab({ groups, onChangeStatus, onDeleteSection, onDeleteTask, onEd
       </div>
       {groups.map((group) => {
         const groupKey = group.id ?? "unclassified";
-        const isOpen = openSectionIds.has(groupKey);
+        const isOpen = !closedSectionIds.has(groupKey);
 
         return (
         <div key={groupKey} className="divide-y divide-slate-100">
