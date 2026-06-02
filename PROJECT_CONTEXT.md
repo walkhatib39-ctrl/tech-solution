@@ -4,6 +4,10 @@ Dernière mise à jour : 2026-04-23
 
 Ce document sert de briefing rapide pour un nouveau développeur. Il décrit le site, l'hébergement, le dépôt GitHub, la stack technique, la base de données et la procédure de déploiement actuelle.
 
+Pour l'exploitation quotidienne par agent (SSH, Plesk Git, commandes de déploiement, seeds, logs et vérifications production), utiliser aussi :
+
+- `docs/OPERATIONS_RUNBOOK.md`
+
 ## Vue d'ensemble
 
 Tech-Solution est le site vitrine de la société Tech-Solution, principalement en arabe, accessible sur :
